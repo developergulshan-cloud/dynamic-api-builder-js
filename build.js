@@ -1,0 +1,141 @@
+/**
+ * LCAP-API — Production Build
+ * Produces a single fully self-contained CJS bundle at dist/index.js.
+ * Every dependency is inlined — no node_modules required at runtime.
+ *
+ * Usage:
+ *   node build.js             → production  (minified, no sourcemap)
+ *   node build.js --dev       → development (readable, inline sourcemap)
+ *   node build.js --watch     → watch mode  (rebuilds on file change)
+ *   node build.js --analyze   → production  + per-module size report
+ */
+
+'use strict';
+
+const esbuild = require('esbuild');
+const fs      = require('fs');
+const path    = require('path');
+
+// ─── CLI flags ────────────────────────────────────────────────────────────────
+const args    = process.argv.slice(2);
+const isDev   = args.includes('--dev');
+const isWatch = args.includes('--watch');
+const analyze = args.includes('--analyze');
+
+// ─── Package metadata ─────────────────────────────────────────────────────────
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+
+// ─── Banner ───────────────────────────────────────────────────────────────────
+const banner = [
+    '/**',
+    ` * ${pkg.name} v${pkg.version}`,
+    ' * Low-Code API Platform — Configuration-driven REST API generator',
+    ` * Build date : ${new Date().toISOString()}`,
+    ' * Node target: node20',
+    ' */',
+].join('\n');
+
+// ─── Shared esbuild options ───────────────────────────────────────────────────
+const sharedOptions = {
+    entryPoints : ['./src/index.js'],
+    outfile     : './dist/index.js',
+
+    bundle      : true,   // inline every dependency
+    platform    : 'node',
+    target      : 'node20',
+    format      : 'cjs',
+
+    // No externals — everything is bundled in
+    external    : [],
+
+    define: {
+        'process.env.NODE_ENV': isDev ? '"development"' : '"production"',
+    },
+
+    loader: {
+        '.json': 'json',  // inline any require()'d JSON files
+    },
+
+    banner   : { js: banner },
+    metafile : analyze,
+    logLevel : 'info',
+};
+
+// ─── Mode overrides ───────────────────────────────────────────────────────────
+const modeOptions = isDev
+    ? { minify: false, sourcemap: 'inline', treeShaking: false }
+    : { minify: true,  sourcemap: false,    treeShaking: true, legalComments: 'none' };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function cleanDist() {
+    const distDir = path.join(__dirname, 'dist');
+    if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true, force: true });
+    fs.mkdirSync(distDir, { recursive: true });
+    console.log('🗑️  LCAP Build: dist/ cleaned');
+}
+
+async function writeAnalysis(metafile) {
+    const text = await esbuild.analyzeMetafile(metafile, { verbose: true });
+    fs.writeFileSync(
+        path.join(__dirname, 'dist', 'meta.json'),
+        JSON.stringify(metafile, null, 2)
+    );
+    console.log('\n📊 LCAP Build: Bundle analysis\n');
+    console.log(text);
+    console.log('📄 LCAP Build: Full metafile written to dist/meta.json');
+}
+
+function printStats() {
+    const outfile = path.join(__dirname, 'dist', 'index.js');
+    if (!fs.existsSync(outfile)) return;
+    const kb = (fs.statSync(outfile).size / 1024).toFixed(1);
+    console.log(`📦 LCAP Build: dist/index.js → ${kb} KB  (fully self-contained)`);
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+(async () => {
+    cleanDist();
+
+    const buildOptions = { ...sharedOptions, ...modeOptions };
+
+    // ── Watch mode ────────────────────────────────────────────────────────────
+    if (isWatch) {
+        console.log('👀 LCAP Build: Starting watch mode…');
+        buildOptions.minify    = false;
+        buildOptions.sourcemap = 'inline';
+
+        const ctx = await esbuild.context(buildOptions);
+        await ctx.watch();
+
+        process.on('SIGINT', async () => {
+            await ctx.dispose();
+            console.log('\n⏹  LCAP Build: Watch stopped');
+            process.exit(0);
+        });
+        return;
+    }
+
+    // ── Single build ──────────────────────────────────────────────────────────
+    const mode = isDev ? 'development' : 'production';
+    console.log(`🔨 LCAP Build: Building in ${mode} mode…`);
+
+    try {
+        const result = await esbuild.build(buildOptions);
+
+        printStats();
+
+        if (analyze && result.metafile) {
+            await writeAnalysis(result.metafile);
+        }
+
+        if (result.errors.length > 0) {
+            console.error('❌ LCAP Build: Completed with errors');
+            process.exit(1);
+        }
+
+        console.log(`✅ LCAP Build: ${mode} bundle ready → dist/index.js`);
+    } catch (err) {
+        console.error('❌ LCAP Build failed:', err.message);
+        process.exit(1);
+    }
+})();

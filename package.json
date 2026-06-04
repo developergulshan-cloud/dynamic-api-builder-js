@@ -1,0 +1,35 @@
+{
+  "name": "lcap-api-module",
+  "version": "1.0.0",
+  "description": "Low-Code API Platform — Configuration-driven REST API generator",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "start":         "node --env-file=.env --watch server.js",
+    "build":         "node build.js",
+    "build:dev":     "node build.js --dev",
+    "build:watch":   "node build.js --watch",
+    "build:analyze": "node build.js --analyze",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "bcryptjs": "^3.0.2",
+    "mysql2": "^3.16.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "express": "^5.2.1"
+  }
+}
