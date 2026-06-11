@@ -4,7 +4,17 @@
  */
 
 const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
+const pool = new Pool({
+    user: 'postgres',
+    host: 'localhost',
+    database: 'mydb',
+    password: 'your_password',
+    port: 5432,
+});
+
+module.exports = pool;
 class LcapQueryBuilder {
     constructor() {
         this.pool = null;
@@ -20,11 +30,12 @@ class LcapQueryBuilder {
         }
 
         this.config = {
-            host: config.host || 'localhost',
-            user: config.user || 'root',
-            password: config.password || '',
-            database: config.database,
-            port: config.port || 3306,
+            type: config.type || 'mysql',
+            host: config.database.host || 'localhost',
+            user: config.database.user || 'root',
+            password: config.database.password || '',
+            database: config.database.database || '',
+            port: config.database.port || 3306,
             waitForConnections: true,
             connectionLimit: config.connectionLimit || 10,
             queueLimit: 0
@@ -37,14 +48,42 @@ class LcapQueryBuilder {
     async _initPool() {
         if (!this.pool) {
             if (!this.config) {
-                throw new Error('LCAP QueryBuilder: Database not configured. Call configure() first.');
+                throw new Error(
+                    'LCAP QueryBuilder: Database not configured. Call configure() first.'
+                );
             }
 
             try {
-                this.pool = mysql.createPool(this.config);
-                console.log('✅ LCAP: Database connection pool initialized');
+                if (this.config.type === 'postgres') {
+                    this.pool = new Pool(this.config);
+
+                    this.pool.on('connect', () => {
+                        console.log('✅ PostgreSQL pool connected');
+                    });
+
+                    this.pool.on('error', (err) => {
+                        console.error('❌ PostgreSQL pool error:', err);
+                    });
+
+                    // Verify connection
+                    const client = await this.pool.connect();
+                    client.release();
+
+                    console.log('✅ PostgreSQL database connection verified');
+                }
+
+                if (this.config.type === 'mysql') {
+                    this.pool = mysql.createPool(this.config);
+
+                    // Verify connection
+                    const connection = await this.pool.getConnection();
+                    connection.release();
+
+                    console.log('✅ MySQL database connection verified');
+                }
             } catch (error) {
-                console.error('❌ LCAP: Database connection failed:', error.message);
+                this.pool = null;
+                console.error('❌ Database connection failed:', error.message);
                 throw error;
             }
         }
@@ -58,8 +97,15 @@ class LcapQueryBuilder {
 
         try {
             const connection = this.connection || this.pool;
-            const [rows] = await connection.execute(sql, params);
-            return rows;
+            if (this.config.type === 'postgres') {
+                let client = await this.pool.connect();
+                const result = await client.query(sql, params);
+                return result.rows;
+            }
+            if (this.config.type === 'mysql') {
+                const [rows] = await connection.execute(sql, params);
+                return rows;
+            }
         } catch (error) {
             console.error('❌ LCAP: Query execution failed:', error.message);
             throw error;
@@ -88,12 +134,20 @@ class LcapQueryBuilder {
      * Build INSERT query
      */
     insert(table, data) {
-        const columns = Object.keys(data).join(', ');
-        const placeholders = Object.keys(data).map(() => '?').join(', ');
+        const keys = Object.keys(data);
         const values = Object.values(data);
 
+        if (this.config && this.config.type === 'postgres') {
+            const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+            return {
+                sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`,
+                params: values
+            };
+        }
+
+        const placeholders = keys.map(() => '?').join(', ');
         return {
-            sql: `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
+            sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`,
             params: values
         };
     }
@@ -102,12 +156,22 @@ class LcapQueryBuilder {
      * Build UPDATE query
      */
     update(table, data, id) {
-        const sets = Object.keys(data).map(key => `${key} = ?`).join(', ');
-        const values = [...Object.values(data), id];
+        const keys = Object.keys(data);
+        const values = Object.values(data);
 
+        if (this.config && this.config.type === 'postgres') {
+            const sets = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
+            const idPlaceholder = `$${keys.length + 1}`;
+            return {
+                sql: `UPDATE ${table} SET ${sets} WHERE id = ${idPlaceholder}`,
+                params: [...values, id]
+            };
+        }
+
+        const sets = keys.map(key => `${key} = ?`).join(', ');
         return {
             sql: `UPDATE ${table} SET ${sets} WHERE id = ?`,
-            params: values
+            params: [...values, id]
         };
     }
 
@@ -115,6 +179,13 @@ class LcapQueryBuilder {
      * Build DELETE query
      */
     delete(table, id) {
+        if (this.config && this.config.type === 'postgres') {
+            return {
+                sql: `DELETE FROM ${table} WHERE id = $1`,
+                params: [id]
+            };
+        }
+
         return {
             sql: `DELETE FROM ${table} WHERE id = ?`,
             params: [id]
@@ -220,6 +291,12 @@ class LcapQueryBuilder {
 
         let sql = `SELECT ${query.columns.join(', ')} FROM ${query.table}`;
         const params = [];
+        // For postgres we need numbered placeholders: $1, $2, ...
+        let idx = 1;
+        const placeholder = () => {
+            if (this.config && this.config.type === 'postgres') return `$${idx++}`;
+            return '?';
+        };
 
         // Add JOINs
         if (query.joins.length > 0) {
@@ -234,11 +311,11 @@ class LcapQueryBuilder {
         if (query.conditions.length > 0) {
             query.conditions.forEach(cond => {
                 if (cond.operator === 'IN') {
-                    const placeholders = cond.values.map(() => '?').join(', ');
+                    const placeholders = cond.values.map(() => placeholder()).join(', ');
                     whereClauses.push(`${cond.field} IN (${placeholders})`);
                     params.push(...cond.values);
                 } else {
-                    whereClauses.push(`${cond.field} ${cond.operator} ?`);
+                    whereClauses.push(`${cond.field} ${cond.operator} ${placeholder()}`);
                     params.push(cond.value);
                 }
             });
@@ -249,7 +326,7 @@ class LcapQueryBuilder {
             query.orConditions.forEach(orCond => {
                 const orClauses = orCond.fields.map(field => {
                     params.push(orCond.value);
-                    return `${field} LIKE ?`;
+                    return `${field} LIKE ${placeholder()}`;
                 });
                 whereClauses.push(`(${orClauses.join(' OR ')})`);
             });
@@ -287,10 +364,10 @@ class LcapQueryBuilder {
      * @returns {*} The scalar value returned by the function
      */
     async callFunction(funcName, params = []) {
-        const placeholders = params.map(() => '?').join(', ');
+        const placeholders = params.map((_, i) => (this.config && this.config.type === 'postgres') ? `$${i + 1}` : '?').join(', ');
         const sql = `SELECT ${funcName}(${placeholders}) AS __result`;
         const rows = await this.execute(sql, params);
-        return rows[0].__result;
+        return rows[0] && rows[0].__result;
     }
 
     /**
@@ -301,13 +378,22 @@ class LcapQueryBuilder {
      */
     async callProcedure(procName, params = []) {
         await this._initPool();
-
-        const placeholders = params.map(() => '?').join(', ');
+        const placeholders = params.map((_, i) => (this.config && this.config.type === 'postgres') ? `$${i + 1}` : '?').join(', ');
         const sql = `CALL ${procName}(${placeholders})`;
 
         try {
+            if (this.config && this.config.type === 'postgres') {
+                const client = await this.pool.connect();
+                try {
+                    const res = await client.query(sql, params);
+                    return [res.rows];
+                } finally {
+                    client.release();
+                }
+            }
+
             const connection = this.connection || this.pool;
-            // query() (not execute()) returns multiple result sets for CALL
+            // query() (not execute()) returns multiple result sets for CALL in mysql
             const [results] = await connection.query(sql, params);
             // mysql2 wraps each result set in an array; filter out the OkPacket
             const resultSets = Array.isArray(results[0]) ? results : [results];

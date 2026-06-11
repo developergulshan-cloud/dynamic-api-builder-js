@@ -25,7 +25,7 @@ function lcapApi(config, options = {}) {
 
     // Initialize database connection
     if (config.database) {
-        LcapQueryBuilder.configure(config.database);
+        LcapQueryBuilder.configure(config);
     }
 
     // Create router with config

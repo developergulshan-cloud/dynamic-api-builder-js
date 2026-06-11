@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const lcapApi = require('./dist/index');
+const lcapApi = require('./src/index');
 const apis = require('./api.json')
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,11 +10,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // database config
 const config = {
+    type: 'postgres',
     database: {
         host: 'localhost',
-        user: 'root',
-        password: 'password',
-        database: 'user_management'
+        user: 'postgres',
+        password: 'Gulshan@814144',
+        database: 'user_management',
+        port: 5432
     },
     apis: apis.apis
 };

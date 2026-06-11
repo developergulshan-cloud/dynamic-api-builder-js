@@ -13,10 +13,10 @@
     "dist/"
   ],
   "scripts": {
-    "start":         "node --env-file=.env --watch server.js",
-    "build":         "node build.js",
-    "build:dev":     "node build.js --dev",
-    "build:watch":   "node build.js --watch",
+    "start": "node --env-file=.env --watch server.js",
+    "build": "node build.js",
+    "build:dev": "node build.js --dev",
+    "build:watch": "node build.js --watch",
     "build:analyze": "node build.js --analyze",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -24,9 +24,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "cors": "^2.8.5",
     "bcryptjs": "^3.0.2",
-    "mysql2": "^3.16.0"
+    "cors": "^2.8.5",
+    "mysql2": "^3.16.0",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

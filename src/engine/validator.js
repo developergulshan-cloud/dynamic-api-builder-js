@@ -20,7 +20,7 @@ class LcapValidator {
         const data = req.method === 'GET' ? req.query : req.body;
 
         for (const [field, rules] of Object.entries(apiConfig.validation)) {
-            const value = data[field];
+            const value = data?.[field];
             const ruleList = rules.split('|');
 
             for (const rule of ruleList) {

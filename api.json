@@ -10,7 +10,7 @@
             "permission": "user.create",
             "type": "CRUD",
             "operation": "CREATE",
-            "table": "users",
+            "table": "students",
             "columns": [
                 "name",
                 "email",
@@ -34,7 +34,7 @@
             "permission": "user.read",
             "type": "CRUD",
             "operation": "READ",
-            "table": "um_users",
+            "table": "students",
             "columns": [
                 "*"
             ],
