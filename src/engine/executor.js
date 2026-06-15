@@ -1,12 +1,12 @@
 /**
- * LCAP Executor Module
+ * DAB Executor Module
  * Executes different types of API operations
  */
 
 const queryBuilder = require('../db/queryBuilder');
 const hooks = require('../engine/hooks');
 
-class LcapExecutor {
+class DabExecutor {
     /**
      * Execute CRUD operation
      */
@@ -104,7 +104,7 @@ class LcapExecutor {
         const { function: funcName, params: paramDefs = [], hooks: apiHooks } = apiConfig;
 
         if (!funcName) {
-            throw new Error('LCAP CALL_FUNCTION: "function" name is required in API config');
+            throw new Error('DAB CALL_FUNCTION: "function" name is required in API config');
         }
 
         try {
@@ -146,7 +146,7 @@ class LcapExecutor {
         const { procedure: procName, params: paramDefs = [], hooks: apiHooks } = apiConfig;
 
         if (!procName) {
-            throw new Error('LCAP CALL_PROCEDURE: "procedure" name is required in API config');
+            throw new Error('DAB CALL_PROCEDURE: "procedure" name is required in API config');
         }
 
         try {
@@ -192,7 +192,7 @@ class LcapExecutor {
                 case 'static':
                     return def.value ?? null;
                 default:
-                    throw new Error(`LCAP: Unknown param source "${def.source}" for param "${def.name}"`);
+                    throw new Error(`DAB: Unknown param source "${def.source}" for param "${def.name}"`);
             }
         });
     }
@@ -364,4 +364,4 @@ class LcapExecutor {
     }
 }
 
-module.exports = LcapExecutor;
+module.exports = DabExecutor;

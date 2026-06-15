@@ -674,7 +674,7 @@ const { router } = dynamicApi(config, {
 
 ### Registering Custom Hooks
 
-Access the `hooks` object returned by `lcapApi` to register your own functions:
+Access the `hooks` object returned by `dabApi` to register your own functions:
 
 ```js
 const { router, hooks } = dynamicApi(config);

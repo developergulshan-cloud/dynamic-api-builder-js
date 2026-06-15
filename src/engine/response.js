@@ -1,9 +1,9 @@
 /**
- * LCAP Response Module
+ * DAB Response Module
  * Standardizes API responses
  */
 
-class LcapResponse {
+class DabResponse {
     /**
      * Format success response
      */
@@ -70,7 +70,7 @@ class LcapResponse {
      */
     static errorHandler() {
         return (err, req, res, next) => {
-            console.error('❌ LCAP Error:', err.message);
+            console.error('❌ DAB Error:', err.message);
             console.error(err.stack);
 
             let status = err.status || 500;
@@ -95,4 +95,4 @@ class LcapResponse {
     }
 }
 
-module.exports = LcapResponse;
+module.exports = DabResponse;

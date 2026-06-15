@@ -1,5 +1,5 @@
 /**
- * LCAP Router Module
+ * DAB Router Module
  * Dynamically generates Express routes from configuration
  */
 
@@ -7,7 +7,7 @@ const express = require('express');
 const validator = require('../engine/validator');
 const executor = require('../engine/executor');
 
-class LcapRouter {
+class DabRouter {
     /**
      * Create Express router from API configuration
      * @param {Array} apis - Array of API definitions
@@ -18,10 +18,10 @@ class LcapRouter {
         const router = express.Router();
 
         if (!Array.isArray(apis)) {
-            throw new Error('LCAP Router: apis must be an array');
+            throw new Error('DAB Router: apis must be an array');
         }
 
-        console.log(`✅ LCAP: Loading ${apis.length} API definitions`);
+        console.log(`✅ DAB: Loading ${apis.length} API definitions`);
 
         // Generate routes from configuration
         apis.forEach(api => {
@@ -39,11 +39,11 @@ class LcapRouter {
         const { endpoint, method, type } = api;
 
         if (!endpoint || !method || !type) {
-            console.warn('⚠️  LCAP: Invalid API definition, skipping:', api.id || 'unknown');
+            console.warn('⚠️  DAB: Invalid API definition, skipping:', api.id || 'unknown');
             return;
         }
 
-        console.log(`📌 LCAP: Registering ${method} ${endpoint}`);
+        console.log(`📌 DAB: Registering ${method} ${endpoint}`);
 
         // Create route handler
         const handler = async (req, res, next) => {
@@ -109,7 +109,7 @@ class LcapRouter {
         if (router[methodLower]) {
             router[methodLower](endpoint, handler);
         } else {
-            console.warn(`⚠️  LCAP: Unknown HTTP method: ${method} for ${endpoint}`);
+            console.warn(`⚠️  DAB: Unknown HTTP method: ${method} for ${endpoint}`);
         }
     }
 
@@ -132,5 +132,4 @@ class LcapRouter {
         }
     }
 }
-
-module.exports = LcapRouter;
+module.exports = DabRouter;

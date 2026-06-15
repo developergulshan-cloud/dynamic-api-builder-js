@@ -1,5 +1,5 @@
 /**
- * LCAP-API — Production Build
+ * DAB-API — Production Build
  * Produces a single fully self-contained CJS bundle at dist/index.js.
  * Every dependency is inlined — no node_modules required at runtime.
  *
@@ -71,7 +71,7 @@ function cleanDist() {
     const distDir = path.join(__dirname, 'dist');
     if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true, force: true });
     fs.mkdirSync(distDir, { recursive: true });
-    console.log('🗑️  LCAP Build: dist/ cleaned');
+    console.log('🗑️  DAB Build: dist/ cleaned');
 }
 
 async function writeAnalysis(metafile) {
@@ -80,16 +80,16 @@ async function writeAnalysis(metafile) {
         path.join(__dirname, 'dist', 'meta.json'),
         JSON.stringify(metafile, null, 2)
     );
-    console.log('\n📊 LCAP Build: Bundle analysis\n');
+    console.log('\n📊 DAB Build: Bundle analysis\n');
     console.log(text);
-    console.log('📄 LCAP Build: Full metafile written to dist/meta.json');
+    console.log('📄 DAB Build: Full metafile written to dist/meta.json');
 }
 
 function printStats() {
     const outfile = path.join(__dirname, 'dist', 'index.js');
     if (!fs.existsSync(outfile)) return;
     const kb = (fs.statSync(outfile).size / 1024).toFixed(1);
-    console.log(`📦 LCAP Build: dist/index.js → ${kb} KB  (fully self-contained)`);
+    console.log(`📦 DAB Build: dist/index.js → ${kb} KB  (fully self-contained)`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ function printStats() {
 
     // ── Watch mode ────────────────────────────────────────────────────────────
     if (isWatch) {
-        console.log('👀 LCAP Build: Starting watch mode…');
+        console.log('👀 DAB Build: Starting watch mode…');
         buildOptions.minify    = false;
         buildOptions.sourcemap = 'inline';
 
@@ -109,7 +109,7 @@ function printStats() {
 
         process.on('SIGINT', async () => {
             await ctx.dispose();
-            console.log('\n⏹  LCAP Build: Watch stopped');
+            console.log('\n⏹  DAB Build: Watch stopped');
             process.exit(0);
         });
         return;
@@ -117,7 +117,7 @@ function printStats() {
 
     // ── Single build ──────────────────────────────────────────────────────────
     const mode = isDev ? 'development' : 'production';
-    console.log(`🔨 LCAP Build: Building in ${mode} mode…`);
+    console.log(`🔨 DAB Build: Building in ${mode} mode…`);
 
     try {
         const result = await esbuild.build(buildOptions);
@@ -129,13 +129,13 @@ function printStats() {
         }
 
         if (result.errors.length > 0) {
-            console.error('❌ LCAP Build: Completed with errors');
+            console.error('❌ DAB Build: Completed with errors');
             process.exit(1);
         }
 
-        console.log(`✅ LCAP Build: ${mode} bundle ready → dist/index.js`);
+        console.log(`✅ DAB Build: ${mode} bundle ready → dist/index.js`);
     } catch (err) {
-        console.error('❌ LCAP Build failed:', err.message);
+        console.error('❌ DAB Build failed:', err.message);
         process.exit(1);
     }
 })();

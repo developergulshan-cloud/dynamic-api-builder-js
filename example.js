@@ -1,10 +1,10 @@
 /**
- * LCAP-API Module - Example Usage
- * This file shows various ways to use the LCAP-API module
+ * DAB-API Module - Example Usage
+ * This file shows various ways to use the DAB-API module
  */
 
 const express = require('express');
-const lcapApi = require('./index');
+const dabApi = require('./index');
 
 // =============================================================================
 // EXAMPLE 1: Basic Setup
@@ -49,7 +49,7 @@ function example1_BasicSetup() {
     ]
   };
 
-  const { router } = lcapApi(config);
+  const { router } = dabApi(config);
   app.use('/api', router);
 
   app.listen(3000, () => {
@@ -95,7 +95,7 @@ function example2_WithMiddleware() {
     ]
   };
 
-  const { router } = lcapApi(config, {
+  const { router } = dabApi(config, {
     middleware: authMiddleware
   });
 
@@ -138,7 +138,7 @@ function example3_WithCustomHooks() {
     ]
   };
 
-  const { router, hooks } = lcapApi(config);
+  const { router, hooks } = dabApi(config);
 
   // Register custom hooks
   hooks.register('sendNotification', async (req, data) => {
@@ -208,7 +208,7 @@ function example4_Transactions() {
     ]
   };
 
-  const { router, hooks } = lcapApi(config);
+  const { router, hooks } = dabApi(config);
 
   // Implement updateInventory hook
   hooks.register('updateInventory', async (req, data) => {
@@ -257,7 +257,7 @@ function example5_CustomFunctions() {
     ]
   };
 
-  const { router, hooks, queryBuilder } = lcapApi(config);
+  const { router, hooks, queryBuilder } = dabApi(config);
 
   // Custom report generator
   hooks.register('generateSalesReport', async (req) => {
@@ -378,7 +378,7 @@ function example6_CompleteEcommerce() {
     ]
   };
 
-  const { router, hooks } = lcapApi(config);
+  const { router, hooks } = dabApi(config);
 
   // Payment processing
   hooks.register('processPayment', async (req, data) => {
@@ -397,7 +397,7 @@ function example6_CompleteEcommerce() {
   app.use('/api', router);
 
   // Error handler
-  const { response } = lcapApi(config);
+  const { response } = dabApi(config);
   app.use(response.errorHandler());
 
   app.listen(3005, () => {
@@ -429,7 +429,7 @@ function example7_LoadFromFile() {
     apis: configFile.apis
   };
 
-  const { router } = lcapApi(config);
+  const { router } = dabApi(config);
   app.use('/api', router);
 
   app.listen(3006, () => {
@@ -546,7 +546,7 @@ function example8_StoredFunctionAndProcedure() {
     ]
   };
 
-  const { router } = lcapApi(config);
+  const { router } = dabApi(config);
   app.use('/api', router);
 
   app.listen(3007, () => {

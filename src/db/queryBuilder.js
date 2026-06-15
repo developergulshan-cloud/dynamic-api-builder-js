@@ -1,5 +1,5 @@
 /**
- * LCAP Query Builder Module
+ * DAB Query Builder Module
  * Database abstraction and query building
  */
 
@@ -15,7 +15,7 @@ const pool = new Pool({
 });
 
 module.exports = pool;
-class LcapQueryBuilder {
+class DabQueryBuilder {
     constructor() {
         this.pool = null;
         this.connection = null;
@@ -26,7 +26,7 @@ class LcapQueryBuilder {
      */
     configure(config) {
         if (!config) {
-            throw new Error('LCAP QueryBuilder: Database configuration is required');
+            throw new Error('DAB QueryBuilder: Database configuration is required');
         }
 
         this.config = {
@@ -47,9 +47,9 @@ class LcapQueryBuilder {
      */
     async _initPool() {
         if (!this.pool) {
-            if (!this.config) {
+                if (!this.config) {
                 throw new Error(
-                    'LCAP QueryBuilder: Database not configured. Call configure() first.'
+                    'DAB QueryBuilder: Database not configured. Call configure() first.'
                 );
             }
 
@@ -107,7 +107,7 @@ class LcapQueryBuilder {
                 return rows;
             }
         } catch (error) {
-            console.error('❌ LCAP: Query execution failed:', error.message);
+            console.error('❌ DAB: Query execution failed:', error.message);
             throw error;
         }
     }
@@ -400,7 +400,7 @@ class LcapQueryBuilder {
             const resultSets = Array.isArray(results[0]) ? results : [results];
             return resultSets.filter(rs => Array.isArray(rs));
         } catch (error) {
-            console.error('❌ LCAP: Procedure call failed:', error.message);
+            console.error('❌ DAB: Procedure call failed:', error.message);
             throw error;
         }
     }
@@ -448,4 +448,4 @@ class LcapQueryBuilder {
 }
 
 // Export singleton instance
-module.exports = new LcapQueryBuilder();
+module.exports = new DabQueryBuilder();

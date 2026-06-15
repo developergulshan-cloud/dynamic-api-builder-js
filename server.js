@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const lcapApi = require('./src/index');
+const dabApi = require('./src/index');
 const dynamicApiForMySql = require('./src/index');
 const apis = require('./psqlapi.json')
 const mysqlapis = require('./mysqlapi.json')
@@ -37,7 +37,7 @@ const mysqlconfig = {
 };
 
 // Dynamic API routes for PostgreSQL
-// let postgresqlApiConfig = lcapApi(config).router;
+// let postgresqlApiConfig = dabApi(config).router;
 // app.use('/api', postgresqlApiConfig);
 
 // Dynamic API routes for MySQL
@@ -47,7 +47,7 @@ app.use('/mysqlapi', mysqlApiConfig);
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'LCAP-API is running' });
+    res.json({ status: 'ok', message: 'DAB-API is running' });
 });
 
 
@@ -59,7 +59,7 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 LCAP-API server running on port ${PORT}`);
+    console.log(`🚀 DAB-API server running on port ${PORT}`);
     console.log(`📋 API base path: http://localhost:${PORT}/api`);
     console.log(`📋 MySQL API base path: http://localhost:${PORT}/mysqlapi`);
 });

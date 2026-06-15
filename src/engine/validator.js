@@ -1,9 +1,9 @@
 /**
- * LCAP Validator Module
+ * DAB Validator Module
  * Request validation based on API configuration
  */
 
-class LcapValidator {
+class DabValidator {
     /**
      * Validate request based on API config
      * @param {Object} req - Express request object
@@ -150,4 +150,4 @@ class LcapValidator {
     }
 }
 
-module.exports = LcapValidator;
+module.exports = DabValidator;

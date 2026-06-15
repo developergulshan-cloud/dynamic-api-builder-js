@@ -1,11 +1,11 @@
 /**
- * LCAP Hooks Module
+ * DAB Hooks Module
  * Manages before/after hooks and custom functions
  */
 
 const bcrypt = require('bcryptjs');
 
-class LcapHooks {
+class DabHooks {
     constructor() {
         // Built-in hooks
         this.hooks = {
@@ -23,14 +23,14 @@ class LcapHooks {
         const hook = this.hooks[hookName];
 
         if (!hook) {
-            console.warn(`⚠️  LCAP: Hook not found: ${hookName}`);
+            console.warn(`⚠️  DAB: Hook not found: ${hookName}`);
             return null;
         }
 
         try {
             return await hook(req, data);
         } catch (error) {
-            console.error(`❌ LCAP: Error executing hook ${hookName}:`, error.message);
+            console.error(`❌ DAB: Error executing hook ${hookName}:`, error.message);
             throw error;
         }
     }
@@ -43,7 +43,7 @@ class LcapHooks {
             throw new Error('Hook must be a function');
         }
         this.hooks[name] = fn;
-        console.log(`✅ LCAP: Registered hook: ${name}`);
+        console.log(`✅ DAB: Registered hook: ${name}`);
     }
 
     /**
@@ -85,7 +85,7 @@ class LcapHooks {
      * Send welcome email (placeholder)
      */
     async sendWelcomeEmail(req, data) {
-        console.log(`📧 LCAP: Sending welcome email to: ${data.email || req.body.email}`);
+        console.log(`📧 DAB: Sending welcome email to: ${data.email || req.body.email}`);
         // Integrate with email service (SendGrid, AWS SES, etc.)
         return { emailSent: true };
     }
@@ -94,7 +94,7 @@ class LcapHooks {
      * Update inventory (placeholder)
      */
     async updateInventory(req, data) {
-        console.log('📦 LCAP: Updating inventory for order:', data);
+        console.log('📦 DAB: Updating inventory for order:', data);
         // Implement inventory update logic
         return { inventoryUpdated: true };
     }
@@ -103,7 +103,7 @@ class LcapHooks {
      * Generate monthly sales report (placeholder)
      */
     async monthlySalesReport(req) {
-        console.log('📊 LCAP: Generating monthly sales report');
+        console.log('📊 DAB: Generating monthly sales report');
 
         // Mock report data
         const mockReport = {
@@ -123,4 +123,4 @@ class LcapHooks {
 }
 
 // Export singleton instance
-module.exports = new LcapHooks();
+module.exports = new DabHooks();
