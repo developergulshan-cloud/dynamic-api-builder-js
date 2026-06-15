@@ -162,8 +162,9 @@ class LcapQueryBuilder {
         if (this.config && this.config.type === 'postgres') {
             const sets = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
             const idPlaceholder = `$${keys.length + 1}`;
+            // RETURNING id allows callers to detect whether a row was updated
             return {
-                sql: `UPDATE ${table} SET ${sets} WHERE id = ${idPlaceholder}`,
+                sql: `UPDATE ${table} SET ${sets} WHERE id = ${idPlaceholder} RETURNING id`,
                 params: [...values, id]
             };
         }

@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const lcapApi = require('./src/index');
-const apis = require('./api.json')
+const dynamicApiForMySql = require('./src/index');
+const apis = require('./psqlapi.json')
+const mysqlapis = require('./mysqlapi.json')
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -21,14 +23,35 @@ const config = {
     apis: apis.apis
 };
 
-const { router } = lcapApi(config);
+// database config
+const mysqlconfig = {
+    type: 'mysql',
+    database: {
+        host: 'localhost',
+        user: 'gulshan',
+        password: 'Gulshan@814144',
+        database: 'user_management',
+        port: 3306
+    },
+    apis: mysqlapis.apis
+};
+
+// Dynamic API routes for PostgreSQL
+// let postgresqlApiConfig = lcapApi(config).router;
+// app.use('/api', postgresqlApiConfig);
+
+// Dynamic API routes for MySQL
+let mysqlApiConfig = dynamicApiForMySql(mysqlconfig).router;
+app.use('/mysqlapi', mysqlApiConfig);
+
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'LCAP-API is running' });
 });
 
-// Dynamic API routes
-app.use('/api', router);
+
+// app.use('/mysqlapi', mysqlRouter);
 
 // 404 handler
 app.use((req, res) => {
@@ -38,6 +61,7 @@ app.use((req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 LCAP-API server running on port ${PORT}`);
     console.log(`📋 API base path: http://localhost:${PORT}/api`);
+    console.log(`📋 MySQL API base path: http://localhost:${PORT}/mysqlapi`);
 });
 
 module.exports = app;

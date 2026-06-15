@@ -9,6 +9,7 @@ const LcapExecutor = require('./engine/executor');
 const LcapQueryBuilder = require('./db/queryBuilder');
 const LcapHooks = require('./engine/hooks');
 const LcapResponse = require('./engine/response');
+const errorHandler = require('./utills/error');
 
 /**
  * Initialize LCAP-API with configuration
@@ -30,6 +31,11 @@ function lcapApi(config, options = {}) {
 
     // Create router with config
     const router = LcapRouter.createRouter(config.apis, options);
+
+    // Attach centralized error handler to the router so errors from dynamic
+    // routes are normalized in one place. Server-level code should not
+    // re-register the same handler to avoid duplicate responses.
+    router.use(errorHandler);
 
     return {
         router,

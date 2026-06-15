@@ -30,6 +30,10 @@ class LcapExecutor {
                     break;
                 case 'UPDATE':
                     result = await this._handleUpdate(table, columns, req.params, req.body);
+                    // If update did not affect any row, return 204 No Content
+                    if (result === null) {
+                        return { status: 204, data: 'Data not found !' };
+                    }
                     break;
                 case 'DELETE':
                     result = await this._handleDelete(table, req.params);
@@ -298,7 +302,22 @@ class LcapExecutor {
         });
 
         const query = queryBuilder.update(table, updateData, params.id);
-        await queryBuilder.execute(query.sql, query.params);
+        const result = await queryBuilder.execute(query.sql, query.params);
+
+        // Detect whether any row was updated.
+        // For Postgres we use RETURNING id which returns an array of rows when updated.
+        // For MySQL the execute returns an OkPacket with affectedRows.
+        let updatedCount = 0;
+        if (Array.isArray(result)) {
+            updatedCount = result.length;
+        } else if (result && typeof result.affectedRows === 'number') {
+            updatedCount = result.affectedRows;
+        }
+
+        if (updatedCount === 0) {
+            return null; // signal not found / nothing updated
+        }
+
         return { id: params.id, ...updateData };
     }
 

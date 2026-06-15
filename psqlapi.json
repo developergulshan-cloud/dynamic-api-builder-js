@@ -12,18 +12,22 @@
             "operation": "CREATE",
             "table": "students",
             "columns": [
-                "name",
+                "first_name",
+                "last_name",
                 "email",
-                "password"
+                "phone",
+                "gender",
+                "date_of_birth",
+                "address"
             ],
             "validation": {
-                "name": "required|string|min:3",
-                "email": "required|email",
-                "password": "required|string|min:8"
-            },
-            "hooks": {
-                "before": "hashPassword",
-                "after": "sendWelcomeEmail"
+                "first_name": "required|string|min:1|max:100",
+                "last_name": "string|max:100",
+                "email": "required|email|max:255",
+                "phone": "string|max:20",
+                "gender": "string|max:10",
+                "date_of_birth": "date",
+                "address": "string"
             }
         },
         {
@@ -42,6 +46,49 @@
                 "email"
             ],
             "pagination": true
+        },
+        {
+            "id": "update-user",
+            "name": "Update User",
+            "endpoint": "/user/:id",
+            "method": "PUT",
+            "permission": "user.update",
+            "type": "CRUD",
+            "operation": "UPDATE",
+            "table": "students",
+            "columns": [
+                "first_name",
+                "last_name",
+                "email",
+                "phone",
+                "gender",
+                "date_of_birth",
+                "address"
+            ],
+            "params": [
+                {
+                    "name": "id",
+                    "source": "params"
+                }
+            ],
+            "validation": {
+                "first_name": "string|max:100",
+                "last_name": "string|max:100",
+                "email": "email|max:255",
+                "phone": "string|max:20",
+                "gender": "string|max:10",
+                "date_of_birth": "date",
+                "address": "string"
+            }
+        },
+        {
+            "id": "delete-user",
+            "name": "Delete User",
+            "endpoint": "/user/delete/:id",
+            "method": "DELETE",
+            "type": "CRUD",
+            "operation": "DELETE",
+            "table": "students"
         },
         {
             "id": "create-order",
@@ -114,15 +161,6 @@
             "pagination": false
         },
         {
-            "id": "delete-user",
-            "name": "Delete User",
-            "endpoint": "/user/delete/:id",
-            "method": "DELETE",
-            "type": "CRUD",
-            "operation": "DELETE",
-            "table": "um_users"
-        },
-        {
             "id": "get-discount",
             "name": "Get Discount (Stored Function)",
             "endpoint": "/discount",
@@ -130,13 +168,22 @@
             "type": "CALL_FUNCTION",
             "function": "get_discount",
             "params": [
-                { "name": "user_id",  "source": "body"   },
-                { "name": "amount",   "source": "body"   },
-                { "name": "promo",    "source": "body"   }
+                {
+                    "name": "user_id",
+                    "source": "body"
+                },
+                {
+                    "name": "amount",
+                    "source": "body"
+                },
+                {
+                    "name": "promo",
+                    "source": "body"
+                }
             ],
             "validation": {
                 "user_id": "required|number",
-                "amount":  "required|number"
+                "amount": "required|number"
             }
         },
         {
@@ -147,15 +194,28 @@
             "type": "CALL_PROCEDURE",
             "procedure": "transfer_funds",
             "params": [
-                { "name": "from_account", "source": "body" },
-                { "name": "to_account",   "source": "body" },
-                { "name": "amount",       "source": "body" },
-                { "name": "currency",     "source": "static", "value": "INR" }
+                {
+                    "name": "from_account",
+                    "source": "body"
+                },
+                {
+                    "name": "to_account",
+                    "source": "body"
+                },
+                {
+                    "name": "amount",
+                    "source": "body"
+                },
+                {
+                    "name": "currency",
+                    "source": "static",
+                    "value": "INR"
+                }
             ],
             "validation": {
                 "from_account": "required|number",
-                "to_account":   "required|number",
-                "amount":       "required|number"
+                "to_account": "required|number",
+                "amount": "required|number"
             }
         },
         {
@@ -166,9 +226,15 @@
             "type": "CALL_PROCEDURE",
             "procedure": "get_user_stats",
             "params": [
-                { "name": "id",     "source": "params" },
-                { "name": "period", "source": "query"  }
+                {
+                    "name": "id",
+                    "source": "params"
+                },
+                {
+                    "name": "period",
+                    "source": "query"
+                }
             ]
         }
     ]
-}   
+}

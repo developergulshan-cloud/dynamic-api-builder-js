@@ -89,7 +89,11 @@ class LcapRouter {
                         throw new Error(`Unknown API type: ${type}`);
                 }
 
-                // Send response
+                // Send response. Treat 204 No Content specially (no body).
+                if (result && result.status === 204) {
+                    return res.status(204).send();
+                }
+
                 res.status(result.status || 200).json({
                     success: true,
                     data: result.data,

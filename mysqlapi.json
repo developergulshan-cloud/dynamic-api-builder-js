@@ -1,0 +1,240 @@
+{
+    "version": "1.0",
+    "basePath": "/api",
+    "apis": [
+        {
+            "id": "create-user",
+            "name": "Create User",
+            "endpoint": "/users",
+            "method": "POST",
+            "permission": "user.create",
+            "type": "CRUD",
+            "operation": "CREATE",
+            "table": "students",
+            "columns": [
+                "first_name",
+                "last_name",
+                "email",
+                "phone",
+                "gender",
+                "date_of_birth",
+                "address"
+            ],
+            "validation": {
+                "first_name": "required|string|min:1|max:100",
+                "last_name": "string|max:100",
+                "email": "required|email|max:255",
+                "phone": "string|max:20",
+                "gender": "string|max:10",
+                "date_of_birth": "date",
+                "address": "string"
+            }
+        },
+        {
+            "id": "get-users",
+            "name": "Get Users",
+            "endpoint": "/users",
+            "method": "GET",
+            "permission": "user.read",
+            "type": "CRUD",
+            "operation": "READ",
+            "table": "um_users",
+            "columns": [
+                "*"
+            ],
+            "filters": [
+                "email"
+            ],
+            "pagination": true
+        },
+        {
+            "id": "update-user",
+            "name": "Update User",
+            "endpoint": "/user/:id",
+            "method": "PUT",
+            "permission": "user.update",
+            "type": "CRUD",
+            "operation": "UPDATE",
+            "table": "students",
+            "columns": [
+                "first_name",
+                "last_name",
+                "email",
+                "phone",
+                "gender",
+                "date_of_birth",
+                "address"
+            ],
+            "params": [
+                {
+                    "name": "id",
+                    "source": "params"
+                }
+            ],
+            "validation": {
+                "first_name": "string|max:100",
+                "last_name": "string|max:100",
+                "email": "email|max:255",
+                "phone": "string|max:20",
+                "gender": "string|max:10",
+                "date_of_birth": "date",
+                "address": "string"
+            }
+        },
+        {
+            "id": "delete-user",
+            "name": "Delete User",
+            "endpoint": "/user/delete/:id",
+            "method": "DELETE",
+            "type": "CRUD",
+            "operation": "DELETE",
+            "table": "students"
+        },
+        {
+            "id": "create-order",
+            "name": "Create Order (Transactional)",
+            "endpoint": "/orders",
+            "method": "POST",
+            "permission": "order.create",
+            "type": "TRANSACTION",
+            "steps": [
+                {
+                    "type": "CRUD",
+                    "operation": "CREATE",
+                    "table": "orders",
+                    "columns": [
+                        "user_id",
+                        "total"
+                    ],
+                    "saveAs": "order"
+                },
+                {
+                    "type": "CRUD",
+                    "operation": "CREATE",
+                    "table": "order_items",
+                    "columns": [
+                        "order_id",
+                        "product_id",
+                        "qty"
+                    ],
+                    "map": {
+                        "order_id": "$order.id"
+                    }
+                },
+                {
+                    "type": "FUNCTION",
+                    "handler": "updateInventory"
+                }
+            ]
+        },
+        {
+            "id": "custom-report",
+            "name": "Monthly Sales Report",
+            "endpoint": "/reports/monthly",
+            "method": "GET",
+            "permission": "report.view",
+            "type": "FUNCTION",
+            "handler": "monthlySalesReport"
+        },
+        {
+            "id": "get-orders-full",
+            "endpoint": "/users-with-roles",
+            "method": "GET",
+            "type": "CRUD",
+            "operation": "READ",
+            "table": "um_users",
+            "columns": [
+                "um_users.*",
+                "um_user_roles.role_id"
+            ],
+            "joins": [
+                {
+                    "type": "INNER",
+                    "table": "um_user_roles",
+                    "condition": "um_users.id = um_user_roles.user_id"
+                }
+            ],
+            "filters": [
+                "email",
+                "first_name"
+            ],
+            "pagination": false
+        },
+        {
+            "id": "get-discount",
+            "name": "Get Discount (Stored Function)",
+            "endpoint": "/discount",
+            "method": "POST",
+            "type": "CALL_FUNCTION",
+            "function": "get_discount",
+            "params": [
+                {
+                    "name": "user_id",
+                    "source": "body"
+                },
+                {
+                    "name": "amount",
+                    "source": "body"
+                },
+                {
+                    "name": "promo",
+                    "source": "body"
+                }
+            ],
+            "validation": {
+                "user_id": "required|number",
+                "amount": "required|number"
+            }
+        },
+        {
+            "id": "transfer-funds",
+            "name": "Transfer Funds (Stored Procedure)",
+            "endpoint": "/transfer",
+            "method": "POST",
+            "type": "CALL_PROCEDURE",
+            "procedure": "transfer_funds",
+            "params": [
+                {
+                    "name": "from_account",
+                    "source": "body"
+                },
+                {
+                    "name": "to_account",
+                    "source": "body"
+                },
+                {
+                    "name": "amount",
+                    "source": "body"
+                },
+                {
+                    "name": "currency",
+                    "source": "static",
+                    "value": "INR"
+                }
+            ],
+            "validation": {
+                "from_account": "required|number",
+                "to_account": "required|number",
+                "amount": "required|number"
+            }
+        },
+        {
+            "id": "user-stats",
+            "name": "User Statistics (Stored Procedure with URL param)",
+            "endpoint": "/users/:id/stats",
+            "method": "GET",
+            "type": "CALL_PROCEDURE",
+            "procedure": "get_user_stats",
+            "params": [
+                {
+                    "name": "id",
+                    "source": "params"
+                },
+                {
+                    "name": "period",
+                    "source": "query"
+                }
+            ]
+        }
+    ]
+}
