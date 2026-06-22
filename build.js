@@ -38,7 +38,7 @@ const banner = [
 // ─── Shared esbuild options ───────────────────────────────────────────────────
 const sharedOptions = {
     entryPoints : ['./src/index.js'],
-    outfile     : './dist/index.js',
+    outfile     : './dynamic-api-builder-js/dist/index.js',
 
     bundle      : true,   // inline every dependency
     platform    : 'node',
@@ -62,34 +62,35 @@ const sharedOptions = {
 };
 
 // ─── Mode overrides ───────────────────────────────────────────────────────────
+// Keep production output readable by disabling minification.
 const modeOptions = isDev
     ? { minify: false, sourcemap: 'inline', treeShaking: false }
-    : { minify: true,  sourcemap: false,    treeShaking: true, legalComments: 'none' };
+    : { minify: false, sourcemap: false,    treeShaking: true, legalComments: 'none' };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function cleanDist() {
-    const distDir = path.join(__dirname, 'dist');
+    const distDir = path.join(__dirname, 'dynamic-api-builder-js/dist');
     if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true, force: true });
     fs.mkdirSync(distDir, { recursive: true });
-    console.log('🗑️  DAB Build: dist/ cleaned');
+    console.log('🗑️  DAB Build: dynamic-api-builder-js/dist cleaned');
 }
 
 async function writeAnalysis(metafile) {
     const text = await esbuild.analyzeMetafile(metafile, { verbose: true });
     fs.writeFileSync(
-        path.join(__dirname, 'dist', 'meta.json'),
+        path.join(__dirname, 'dynamic-api-builder-js/dist', 'meta.json'),
         JSON.stringify(metafile, null, 2)
     );
     console.log('\n📊 DAB Build: Bundle analysis\n');
     console.log(text);
-    console.log('📄 DAB Build: Full metafile written to dist/meta.json');
+    console.log('📄 DAB Build: Full metafile written to dynamic-api-builder-js/dist/meta.json');
 }
 
 function printStats() {
-    const outfile = path.join(__dirname, 'dist', 'index.js');
+    const outfile = path.join(__dirname, 'dynamic-api-builder-js/dist', 'index.js');
     if (!fs.existsSync(outfile)) return;
     const kb = (fs.statSync(outfile).size / 1024).toFixed(1);
-    console.log(`📦 DAB Build: dist/index.js → ${kb} KB  (fully self-contained)`);
+    console.log(`📦 DAB Build: dynamic-api-builder-js/dist/index.js → ${kb} KB  (fully self-contained)`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ function printStats() {
             process.exit(1);
         }
 
-        console.log(`✅ DAB Build: ${mode} bundle ready → dist/index.js`);
+        console.log(`✅ DAB Build: ${mode} bundle ready → dynamic-api-builder-js/dist/index.js`);
     } catch (err) {
         console.error('❌ DAB Build failed:', err.message);
         process.exit(1);
