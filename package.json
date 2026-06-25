@@ -1,6 +1,6 @@
 {
   "name": "dab-api-module",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Low-Code API Platform — Configuration-driven REST API generator",
   "main": "dist/index.js",
   "exports": {
