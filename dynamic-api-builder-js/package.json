@@ -1,6 +1,6 @@
 {
   "name": "dynamic-api-builder-js",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -8,5 +8,6 @@
   "keywords": [],
   "author": "Gulshan Marandi",
   "license": "ISC",
-  "description": "Configuration-driven REST API generator for Node.js — define endpoints in JSON, get a fully working Express API instantly."
+  "description": "Configuration-driven REST API generator for Node.js — define endpoints in JSON, get a fully working Express API instantly.",
+  "types": "dist/index.d.ts"
 }

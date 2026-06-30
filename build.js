@@ -70,9 +70,15 @@ const modeOptions = isDev
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function cleanDist() {
     const distDir = path.join(__dirname, 'dynamic-api-builder-js/dist');
-    if (fs.existsSync(distDir)) fs.rmSync(distDir, { recursive: true, force: true });
+    const indexFile = path.join(distDir, 'index.js');
+
     fs.mkdirSync(distDir, { recursive: true });
-    console.log('🗑️  DAB Build: dynamic-api-builder-js/dist cleaned');
+
+    if (fs.existsSync(indexFile)) {
+        fs.rmSync(indexFile, { force: true });
+    }
+
+    console.log('🗑️  DAB Build: dynamic-api-builder-js/dist/index.js cleaned');
 }
 
 async function writeAnalysis(metafile) {

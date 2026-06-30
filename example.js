@@ -4,7 +4,8 @@
  */
 
 const express = require('express');
-const dabApi = require('./index');
+// const dabApi = require('./index');
+import dabApi from 'dynamic-api-builder-js';
 
 // =============================================================================
 // EXAMPLE 1: Basic Setup
@@ -262,7 +263,7 @@ function example5_CustomFunctions() {
   // Custom report generator
   hooks.register('generateSalesReport', async (req) => {
     const { startDate, endDate } = req.query;
-    
+
     // Use query builder for custom queries
     const sales = await queryBuilder.execute(
       'SELECT SUM(total) as total, COUNT(*) as count FROM orders WHERE created_at BETWEEN ? AND ?',
@@ -280,7 +281,7 @@ function example5_CustomFunctions() {
   hooks.register('getDashboard', async (req) => {
     const users = await queryBuilder.execute('SELECT COUNT(*) as count FROM users');
     const orders = await queryBuilder.execute('SELECT COUNT(*) as count FROM orders');
-    
+
     return {
       totalUsers: users[0].count,
       totalOrders: orders[0].count,
@@ -494,13 +495,13 @@ function example8_StoredFunctionAndProcedure() {
         type: 'CALL_FUNCTION',
         function: 'get_discount',
         params: [
-          { name: 'user_id', source: 'body'   },
-          { name: 'amount',  source: 'body'   },
-          { name: 'promo',   source: 'body'   }
+          { name: 'user_id', source: 'body' },
+          { name: 'amount', source: 'body' },
+          { name: 'promo', source: 'body' }
         ],
         validation: {
           user_id: 'required|number',
-          amount:  'required|number'
+          amount: 'required|number'
         }
       },
 
@@ -516,15 +517,15 @@ function example8_StoredFunctionAndProcedure() {
         type: 'CALL_PROCEDURE',
         procedure: 'transfer_funds',
         params: [
-          { name: 'from_account', source: 'body'   },
-          { name: 'to_account',   source: 'body'   },
-          { name: 'amount',       source: 'body'   },
-          { name: 'currency',     source: 'static', value: 'INR' }   // hard-coded
+          { name: 'from_account', source: 'body' },
+          { name: 'to_account', source: 'body' },
+          { name: 'amount', source: 'body' },
+          { name: 'currency', source: 'static', value: 'INR' }   // hard-coded
         ],
         validation: {
           from_account: 'required|number',
-          to_account:   'required|number',
-          amount:       'required|number'
+          to_account: 'required|number',
+          amount: 'required|number'
         }
       },
 
@@ -539,8 +540,8 @@ function example8_StoredFunctionAndProcedure() {
         type: 'CALL_PROCEDURE',
         procedure: 'get_user_stats',
         params: [
-          { name: 'id',     source: 'params' },
-          { name: 'period', source: 'query'  }
+          { name: 'id', source: 'params' },
+          { name: 'period', source: 'query' }
         ]
       }
     ]
