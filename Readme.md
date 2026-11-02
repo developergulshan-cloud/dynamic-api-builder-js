@@ -228,6 +228,42 @@ dynamicApi({
 });
 ```
 
+For APIs that use two databases at the same time, configure each connection by name and select it on each API:
+
+```js
+dynamicApi({
+  defaultDatabase: 'postgres',
+  databases: {
+    postgres: {
+      type: 'postgres',
+      database: {
+        host: process.env.PG_HOST,
+        user: process.env.PG_USER,
+        password: process.env.PG_PASS,
+        database: process.env.PG_NAME,
+        port: 5432
+      }
+    },
+    mysql: {
+      type: 'mysql',
+      database: {
+        host: process.env.MYSQL_HOST,
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASS,
+        database: process.env.MYSQL_NAME,
+        port: 3306
+      }
+    }
+  },
+  apis: [
+    { endpoint: '/users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users' },
+    { endpoint: '/legacy-users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users', database: 'mysql' }
+  ]
+});
+```
+
+Each configured database has its own connection pool. An API's optional `database` field chooses that pool; APIs without the field use `defaultDatabase` (the first configured database if omitted). The existing single `database` configuration remains supported.
+
 **`database` options:**
 
 | Field | Default | Description |
@@ -255,6 +291,7 @@ Every API definition object shares these common top-level fields:
 | `permission` | Optional | Permission key (informational, for your auth middleware) |
 | `validation` | Optional | Validation rules object |
 | `hooks` | Optional | `{ before: "hookName", after: "hookName" }` |
+| `database` | Optional | Name of the configured database connection to use; defaults to `defaultDatabase` |
 
 ---
 

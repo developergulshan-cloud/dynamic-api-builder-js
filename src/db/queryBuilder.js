@@ -6,19 +6,11 @@
 const mysql = require('mysql2/promise');
 const { Pool } = require('pg');
 
-const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'mydb',
-    password: 'your_password',
-    port: 5432,
-});
-
-module.exports = pool;
 class DabQueryBuilder {
     constructor() {
         this.pool = null;
-        this.connection = null;
+        this.databaseBuilders = null;
+        this.defaultDatabaseName = null;
     }
 
     /**
@@ -29,13 +21,42 @@ class DabQueryBuilder {
             throw new Error('DAB QueryBuilder: Database configuration is required');
         }
 
+        if (config.databases) {
+            if (typeof config.databases !== 'object' || Array.isArray(config.databases)) {
+                throw new Error('DAB QueryBuilder: databases must be an object keyed by database name');
+            }
+
+            const names = Object.keys(config.databases);
+            if (names.length === 0) {
+                throw new Error('DAB QueryBuilder: At least one database configuration is required');
+            }
+
+            this.databaseBuilders = {};
+            for (const [name, databaseConfig] of Object.entries(config.databases)) {
+                const builder = new DabQueryBuilder();
+                builder.configure(databaseConfig);
+                this.databaseBuilders[name] = builder;
+            }
+
+            this.defaultDatabaseName = config.defaultDatabase || names[0];
+            if (!this.databaseBuilders[this.defaultDatabaseName]) {
+                throw new Error(
+                    `DAB QueryBuilder: defaultDatabase "${this.defaultDatabaseName}" is not configured`
+                );
+            }
+            return;
+        }
+
+        const database = config.database || config;
+        this.databaseBuilders = null;
+        this.defaultDatabaseName = null;
         this.config = {
             type: config.type || 'mysql',
-            host: config.database.host || 'localhost',
-            user: config.database.user || 'root',
-            password: config.database.password || '',
-            database: config.database.database || '',
-            port: config.database.port || 3306,
+            host: database.host || 'localhost',
+            user: database.user || 'root',
+            password: database.password || '',
+            database: database.database || '',
+            port: database.port || (config.type === 'postgres' ? 5432 : 3306),
             waitForConnections: true,
             connectionLimit: config.connectionLimit || 10,
             queueLimit: 0
@@ -43,11 +64,30 @@ class DabQueryBuilder {
     }
 
     /**
+     * Resolve the query builder for a named database, or the configured default.
+     */
+    forDatabase(name) {
+        if (!this.databaseBuilders) {
+            if (name) {
+                throw new Error(`DAB QueryBuilder: Database "${name}" is not configured`);
+            }
+            return this;
+        }
+
+        const databaseName = name || this.defaultDatabaseName;
+        const builder = this.databaseBuilders[databaseName];
+        if (!builder) {
+            throw new Error(`DAB QueryBuilder: Database "${databaseName}" is not configured`);
+        }
+        return builder;
+    }
+
+    /**
      * Initialize connection pool
      */
     async _initPool() {
         if (!this.pool) {
-                if (!this.config) {
+            if (!this.config) {
                 throw new Error(
                     'DAB QueryBuilder: Database not configured. Call configure() first.'
                 );
@@ -70,9 +110,7 @@ class DabQueryBuilder {
                     client.release();
 
                     console.log('✅ PostgreSQL database connection verified');
-                }
-
-                if (this.config.type === 'mysql') {
+                } else if (this.config.type === 'mysql') {
                     this.pool = mysql.createPool(this.config);
 
                     // Verify connection
@@ -80,6 +118,8 @@ class DabQueryBuilder {
                     connection.release();
 
                     console.log('✅ MySQL database connection verified');
+                } else {
+                    throw new Error(`Unsupported database type: ${this.config.type}`);
                 }
             } catch (error) {
                 this.pool = null;
@@ -92,17 +132,23 @@ class DabQueryBuilder {
     /**
      * Execute SQL query
      */
-    async execute(sql, params = []) {
+    async execute(sql, params = [], transactionConnection) {
         await this._initPool();
 
         try {
-            const connection = this.connection || this.pool;
             if (this.config.type === 'postgres') {
-                let client = await this.pool.connect();
-                const result = await client.query(sql, params);
-                return result.rows;
+                const client = transactionConnection || await this.pool.connect();
+                try {
+                    const result = await client.query(sql, params);
+                    return result.rows;
+                } finally {
+                    if (!transactionConnection) {
+                        client.release();
+                    }
+                }
             }
             if (this.config.type === 'mysql') {
+                const connection = transactionConnection || this.pool;
                 const [rows] = await connection.execute(sql, params);
                 return rows;
             }
@@ -140,7 +186,7 @@ class DabQueryBuilder {
         if (this.config && this.config.type === 'postgres') {
             const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
             return {
-                sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`,
+                sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING id`,
                 params: values
             };
         }
@@ -393,7 +439,7 @@ class DabQueryBuilder {
                 }
             }
 
-            const connection = this.connection || this.pool;
+            const connection = this.pool;
             // query() (not execute()) returns multiple result sets for CALL in mysql
             const [results] = await connection.query(sql, params);
             // mysql2 wraps each result set in an array; filter out the OkPacket
@@ -410,29 +456,55 @@ class DabQueryBuilder {
      */
     async beginTransaction() {
         await this._initPool();
-        this.connection = await this.pool.getConnection();
-        await this.connection.beginTransaction();
+        if (this.config.type === 'postgres') {
+            const connection = await this.pool.connect();
+            try {
+                await connection.query('BEGIN');
+                return connection;
+            } catch (error) {
+                connection.release();
+                throw error;
+            }
+        }
+
+        const connection = await this.pool.getConnection();
+        await connection.beginTransaction();
+        return connection;
     }
 
     /**
      * Commit transaction
      */
-    async commit() {
-        if (this.connection) {
-            await this.connection.commit();
-            this.connection.release();
-            this.connection = null;
+    async commit(connection) {
+        if (!connection) {
+            return;
+        }
+        try {
+            if (this.config.type === 'postgres') {
+                await connection.query('COMMIT');
+            } else {
+                await connection.commit();
+            }
+        } finally {
+            connection.release();
         }
     }
 
     /**
      * Rollback transaction
      */
-    async rollback() {
-        if (this.connection) {
-            await this.connection.rollback();
-            this.connection.release();
-            this.connection = null;
+    async rollback(connection) {
+        if (!connection) {
+            return;
+        }
+        try {
+            if (this.config.type === 'postgres') {
+                await connection.query('ROLLBACK');
+            } else {
+                await connection.rollback();
+            }
+        } finally {
+            connection.release();
         }
     }
 
@@ -440,6 +512,13 @@ class DabQueryBuilder {
      * Close all connections
      */
     async close() {
+        if (this.databaseBuilders) {
+            await Promise.all(Object.values(this.databaseBuilders).map(builder => builder.close()));
+            this.databaseBuilders = null;
+            this.defaultDatabaseName = null;
+            return;
+        }
+
         if (this.pool) {
             await this.pool.end();
             this.pool = null;

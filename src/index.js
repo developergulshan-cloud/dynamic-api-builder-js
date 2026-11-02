@@ -15,7 +15,8 @@ const errorHandler = require('./utills/error');
  * Initialize DAB-API with configuration
  * @param {Object} config - DAB configuration
  * @param {Array} config.apis - Array of API definitions
- * @param {Object} config.database - Database configuration
+ * @param {Object} config.database - Single database configuration
+ * @param {Object} config.databases - Named database configurations
  * @param {Object} options - Additional options
  * @returns {Object} Express router and utilities
  */
@@ -25,7 +26,7 @@ function dabApi(config, options = {}) {
     }
 
     // Initialize database connection
-    if (config.database) {
+    if (config.database || config.databases) {
         DabQueryBuilder.configure(config);
     }
 
