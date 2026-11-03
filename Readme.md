@@ -331,6 +331,42 @@ Maps an HTTP route to a single database table operation.
 | `filterConfig` | READ | Per-filter operator config (see [Filters](#filters--pagination)) |
 | `pagination` | READ | `true` to enable `?page=&limit=` pagination |
 | `joins` | READ | Array of JOIN definitions (see [Joins](#joins)) |
+| `customQuery` | Any | SQL string to execute instead of building SQL from the CRUD fields |
+
+When `customQuery` is set, it replaces the generated SQL. If the query has no `?` placeholders, `filters` and `filterConfig` are applied to the custom query's result columns using parameterized conditions. If it contains `?` placeholders, `filters` instead names the request parameters to bind to those placeholders, in order, and no generated filters are added. `READ` binds from query parameters; `CREATE` and `UPDATE` bind from the request body. Each placeholder must have a matching filter name and request value. PostgreSQL queries may use `?` in the configuration; DAB converts them to `$1`, `$2`, and so on. Other CRUD query fields such as `table`, `columns`, and `joins` are ignored.
+
+For example, this `READ` query binds from `req.query`:
+
+```json
+{
+  "id": "get-active-users",
+  "endpoint": "/users",
+  "method": "GET",
+  "type": "CRUD",
+  "operation": "READ",
+  "filters": ["email"],
+  "customQuery": "SELECT id, name, email FROM users WHERE active = 1",
+  "pagination": true
+}
+```
+
+`GET /api/users?email=person@example.com&page=2&limit=25` applies the configured filter and pagination to this query. When pagination is enabled, DAB wraps the custom SELECT and applies `LIMIT`/`OFFSET` (defaulting to page 1 and limit 10). Filter names must refer to columns returned by the custom SELECT. Custom SQL is trusted configuration: do not build it by interpolating untrusted request values.
+
+For custom SQL with placeholders, list the matching request parameter names in `filters` order. For `CREATE`/`UPDATE`, these names are read from `req.body`:
+
+```json
+{
+  "id": "update-user",
+  "endpoint": "/users/:id",
+  "method": "PUT",
+  "type": "CRUD",
+  "operation": "UPDATE",
+  "filters": ["name", "address", "id"],
+  "customQuery": "UPDATE users SET name = ?, address = ? WHERE id = ?"
+}
+```
+
+`PUT /api/users/42` with body `{"name":"Ada","address":"London","id":42}` binds those values to the three placeholders. Configure the names in SQL placeholder order. The configured SQL is used as written; DAB does not append additional filter conditions.
 
 **Operation behaviours:**
 
@@ -389,6 +425,25 @@ Executes multiple CRUD or FUNCTION steps inside a single MySQL transaction. If a
 | `saveAs` | Key name to store this step's result for use by later steps |
 | `map` | Map fields from previous step results using `$stepName.field` syntax |
 | `handler` | Hook function name (FUNCTION steps) |
+| `customQuery` | Optional SQL string for a CRUD step, executed directly on the transaction connection |
+| `pagination` | Optional `true` to paginate a custom SELECT step; page defaults to 1 and limit to 10 |
+
+A transaction can also specify `customQuery` at its top level to run one SQL statement in the transaction instead of `steps`. Per-step custom queries run within the same transaction as the other steps:
+
+```json
+{
+  "type": "TRANSACTION",
+  "steps": [
+    {
+      "type": "CRUD",
+      "customQuery": "UPDATE inventory SET quantity = quantity - 1 WHERE id = 42",
+      "saveAs": "inventoryUpdate"
+    }
+  ]
+}
+```
+
+Transaction-level and step-level custom queries can also specify `filters`, `filterConfig`, and `pagination`; filters are applied to the custom SELECT's result columns unless the custom SQL contains `?` placeholders, in which case `filters` provides the ordered binding names and no generated filters are added.
 
 **Result passing with `map`:**
 

@@ -22,25 +22,38 @@ class DabExecutor {
 
             let result;
 
-            switch (operation) {
-                case 'CREATE':
-                    result = await this._handleCreate(table, columns, req.body, database);
-                    break;
-                case 'READ':
-                    result = await this._handleRead(table, filters, pagination, req.query, joins, columns, filterConfig, database);
-                    break;
-                case 'UPDATE':
-                    result = await this._handleUpdate(table, columns, req.params, req.body, database);
-                    // If update did not affect any row, return 204 No Content
-                    if (result === null) {
-                        return { status: 204, data: 'Data not found !' };
-                    }
-                    break;
-                case 'DELETE':
-                    result = await this._handleDelete(table, req.params, database);
-                    break;
-                default:
-                    throw new Error(`Unknown CRUD operation: ${operation}`);
+            if (apiConfig.customQuery !== undefined) {
+                result = await this._executeCustomQuery(
+                    apiConfig.customQuery,
+                    database,
+                    undefined,
+                    pagination,
+                    req.query,
+                    filters,
+                    filterConfig,
+                    operation === 'CREATE' || operation === 'UPDATE' ? req.body : undefined
+                );
+            } else {
+                switch (operation) {
+                    case 'CREATE':
+                        result = await this._handleCreate(table, columns, req.body, database);
+                        break;
+                    case 'READ':
+                        result = await this._handleRead(table, filters, pagination, req.query, joins, columns, filterConfig, database);
+                        break;
+                    case 'UPDATE':
+                        result = await this._handleUpdate(table, columns, req.params, req.body, database);
+                        // If update did not affect any row, return 204 No Content
+                        if (result === null) {
+                            return { status: 204, data: 'Data not found !' };
+                        }
+                        break;
+                    case 'DELETE':
+                        result = await this._handleDelete(table, req.params, database);
+                        break;
+                    default:
+                        throw new Error(`Unknown CRUD operation: ${operation}`);
+                }
             }
 
             // Execute after hook
@@ -58,13 +71,28 @@ class DabExecutor {
      * Execute transaction (multiple operations)
      */
     static async executeTransaction(apiConfig, req) {
-        const { steps } = apiConfig;
+        const { steps = [] } = apiConfig;
         const results = {};
         const database = queryBuilder.forDatabase(apiConfig.database);
         let connection;
 
         try {
             connection = await database.beginTransaction();
+
+            if (apiConfig.customQuery !== undefined) {
+                const result = await this._executeCustomQuery(
+                    apiConfig.customQuery,
+                    database,
+                    connection,
+                    apiConfig.pagination,
+                    req.query,
+                    apiConfig.filters,
+                    apiConfig.filterConfig
+                );
+                await database.commit(connection);
+                connection = null;
+                return { status: 200, data: result };
+            }
 
             for (const step of steps) {
                 let stepResult;
@@ -220,6 +248,186 @@ class DabExecutor {
     }
 
     /**
+     * Execute configured SQL directly. Pagination wraps SELECT queries so it
+     * can be applied without parsing or rewriting the configured SQL.
+     * @private
+     */
+    static async _executeCustomQuery(
+        customQuery,
+        database,
+        connection,
+        pagination,
+        queryParams,
+        filters,
+        filterConfig,
+        placeholderParams = queryParams
+    ) {
+        if (typeof customQuery !== 'string' || !customQuery.trim()) {
+            throw new Error('DAB: customQuery must be a non-empty SQL string');
+        }
+
+        const preparedQuery = this._prepareCustomQuery(customQuery, database);
+        let queryParamsForCustomQuery = [];
+        if (preparedQuery.placeholderCount > 0) {
+            if (!Array.isArray(filters) || filters.length !== preparedQuery.placeholderCount) {
+                throw new Error(
+                    `DAB: customQuery has ${preparedQuery.placeholderCount} placeholders; ` +
+                    'provide one filter name per placeholder in binding order'
+                );
+            }
+
+            queryParamsForCustomQuery = filters.map(filter => placeholderParams?.[filter]);
+            const missingParamIndex = queryParamsForCustomQuery.findIndex(value => value === undefined);
+            if (missingParamIndex !== -1) {
+                throw new Error(
+                    `DAB: Missing request parameter "${filters[missingParamIndex]}" for customQuery placeholder`
+                );
+            }
+
+            if (!pagination) {
+                return database.execute(preparedQuery.sql.trim(), queryParamsForCustomQuery, connection);
+            }
+
+            let query = database.select(
+                `(${preparedQuery.sql.trim().replace(/;\s*$/, '')}) AS dab_custom_query`
+            );
+            const page = parseInt(queryParams?.page, 10) || 1;
+            const limit = parseInt(queryParams?.limit, 10) || 10;
+            query = database.paginate(query, limit, (page - 1) * limit);
+            const builtQuery = database.build(query);
+            return database.execute(builtQuery.sql, queryParamsForCustomQuery, connection);
+        }
+
+        const hasFilterValue = filters && queryParams && filters.some(filter => (
+            queryParams[filter] !== undefined &&
+            queryParams[filter] !== null &&
+            queryParams[filter] !== ''
+        ));
+        const hasOrFilter = queryParams?._or && filterConfig?.orFields;
+        if (!pagination && !hasFilterValue && !hasOrFilter) {
+            return database.execute(customQuery.trim(), [], connection);
+        }
+
+        let query = database.select(`(${customQuery.trim().replace(/;\s*$/, '')}) AS dab_custom_query`);
+
+        if (filters && queryParams) {
+            query = this._applyFilters(query, filters, queryParams, filterConfig, database);
+        }
+
+        if (pagination) {
+            const page = parseInt(queryParams?.page, 10) || 1;
+            const limit = parseInt(queryParams?.limit, 10) || 10;
+            query = database.paginate(query, limit, (page - 1) * limit);
+        }
+
+        const builtQuery = database.build(query);
+        return database.execute(builtQuery.sql, builtQuery.params, connection);
+    }
+
+    /**
+     * Convert positional `?` placeholders to the configured database syntax.
+     * Question marks inside quoted strings and SQL comments are left untouched.
+     * @private
+     */
+    static _prepareCustomQuery(customQuery, database) {
+        let sql = '';
+        let placeholderCount = 0;
+        let quote = null;
+        let lineComment = false;
+        let blockComment = false;
+
+        for (let i = 0; i < customQuery.length; i++) {
+            const char = customQuery[i];
+            const next = customQuery[i + 1];
+
+            if (lineComment) {
+                sql += char;
+                if (char === '\n') lineComment = false;
+                continue;
+            }
+
+            if (blockComment) {
+                sql += char;
+                if (char === '*' && next === '/') {
+                    sql += next;
+                    i++;
+                    blockComment = false;
+                }
+                continue;
+            }
+
+            if (quote) {
+                sql += char;
+                if (char === '\\' && next !== undefined) {
+                    sql += next;
+                    i++;
+                } else if (char === quote) {
+                    if (next === quote) {
+                        sql += next;
+                        i++;
+                    } else {
+                        quote = null;
+                    }
+                }
+                continue;
+            }
+
+            if (char === "'" || char === '"' || char === '`') {
+                quote = char;
+                sql += char;
+            } else if (char === '/' && next === '*') {
+                blockComment = true;
+                sql += char + next;
+                i++;
+            } else if ((char === '-' && next === '-') || char === '#') {
+                lineComment = true;
+                sql += char;
+                if (next === '-') {
+                    sql += next;
+                    i++;
+                }
+            } else if (char === '?') {
+                placeholderCount++;
+                sql += database.config?.type === 'postgres'
+                    ? `$${placeholderCount}`
+                    : '?';
+            } else {
+                sql += char;
+            }
+        }
+
+        return { sql, placeholderCount };
+    }
+
+    /**
+     * Apply the configured READ filters to a query object.
+     * @private
+     */
+    static _applyFilters(query, filters, queryParams, filterConfig, database) {
+        filters.forEach(filter => {
+            const filterDef = filterConfig && filterConfig[filter];
+            const operator = filterDef?.operator || '=';
+            const value = queryParams[filter];
+
+            if (value !== undefined && value !== null && value !== '') {
+                if (typeof value === 'string' && value.includes(',') && operator === '=') {
+                    query = database.whereIn(query, filter, value.split(','));
+                } else if (operator === 'LIKE' || operator === 'like') {
+                    query = database.where(query, filter, `%${value}%`, 'LIKE');
+                } else {
+                    query = database.where(query, filter, value, operator);
+                }
+            }
+        });
+
+        if (queryParams._or && filterConfig?.orFields) {
+            query = database.whereOr(query, filterConfig.orFields, queryParams._or);
+        }
+
+        return query;
+    }
+
+    /**
      * Handle CREATE operation
      * @private
      */
@@ -253,42 +461,14 @@ class DabExecutor {
             });
         }
 
-        // Apply filters with advanced operators
         if (filters && queryParams) {
-            filters.forEach(filter => {
-                // Check if filter has configuration for operators
-                const filterDef = filterConfig && filterConfig[filter];
-                const operator = filterDef?.operator || '=';
-
-                if (queryParams[filter]) {
-                    const value = queryParams[filter];
-
-                    // Handle multiple values (OR condition)
-                    if (value.includes(',') && operator === '=') {
-                        query = database.whereIn(query, filter, value.split(','));
-                    }
-                    // Handle LIKE operator
-                    else if (operator === 'LIKE' || operator === 'like') {
-                        query = database.where(query, filter, `%${value}%`, 'LIKE');
-                    }
-                    // Handle other operators
-                    else {
-                        query = database.where(query, filter, value, operator);
-                    }
-                }
-            });
-        }
-
-        // Apply OR conditions if configured
-        if (queryParams._or && filterConfig?.orFields) {
-            const orValue = queryParams._or;
-            query = database.whereOr(query, filterConfig.orFields, orValue);
+            query = this._applyFilters(query, filters, queryParams, filterConfig, database);
         }
 
         // Apply pagination
-        if (pagination && queryParams.page) {
-            const page = parseInt(queryParams.page) || 1;
-            const limit = parseInt(queryParams.limit) || 10;
+        if (pagination) {
+            const page = parseInt(queryParams?.page, 10) || 1;
+            const limit = parseInt(queryParams?.limit, 10) || 10;
             const offset = (page - 1) * limit;
             query = database.paginate(query, limit, offset);
         }
@@ -345,6 +525,19 @@ class DabExecutor {
      * @private
      */
     static async _executeCRUDStep(step, req, previousResults, database, connection) {
+        if (step.customQuery !== undefined) {
+            return this._executeCustomQuery(
+                step.customQuery,
+                database,
+                connection,
+                step.pagination,
+                req.query,
+                step.filters,
+                step.filterConfig,
+                step.operation === 'CREATE' || step.operation === 'UPDATE' ? req.body : undefined
+            );
+        }
+
         const { operation, table, columns, map } = step;
         let data = { ...req.body };
 
