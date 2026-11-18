@@ -33,7 +33,7 @@
         {
             "id": "get-users",
             "name": "Get Users",
-            "endpoint": "/users",
+            "endpoint": "/user/:id",
             "method": "GET",
             "permission": "user.read",
             "type": "CRUD",
@@ -42,8 +42,15 @@
             "columns": [
                 "*"
             ],
+            "customQuery": "SELECT * FROM um_users where id = ?",
             "filters": [
-                "email"
+                "id"
+            ],
+            "params": [
+                {
+                    "name": "email",
+                    "source": "query"
+                }
             ],
             "pagination": true
         },

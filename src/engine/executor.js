@@ -102,7 +102,27 @@ class DabExecutor {
                 let stepResult;
 
                 if (step.type === 'CRUD') {
-                    stepResult = await this._executeCRUDStep(step, req, results, database, connection);
+                    if (step.forEach !== undefined) {
+                        const items = req.body?.[step.forEach];
+                        if (!Array.isArray(items)) {
+                            throw new Error(`DAB: Transaction step forEach "${step.forEach}" must reference an array in the request body`);
+                        }
+                        stepResult = [];
+                        for (const item of items) {
+                            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                                throw new Error(`DAB: Each item in request body array "${step.forEach}" must be an object`);
+                            }
+                            stepResult.push(await this._executeCRUDStep(
+                                step,
+                                { ...req, body: item, params: { ...req.params, id: item?.id } },
+                                results,
+                                database,
+                                connection
+                            ));
+                        }
+                    } else {
+                        stepResult = await this._executeCRUDStep(step, req, results, database, connection);
+                    }
                 } else if (step.type === 'FUNCTION') {
                     stepResult = await hooks.execute(step.handler, req, results);
                 }

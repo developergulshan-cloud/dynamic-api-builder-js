@@ -28,8 +28,8 @@ const mysqlconfig = {
     type: 'mysql',
     database: {
         host: 'localhost',
-        user: 'gulshan',
-        password: 'Gulshan@814144',
+        user: 'root',
+        password: 'password',
         database: 'user_management',
         port: 3306
     },

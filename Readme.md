@@ -568,6 +568,52 @@ Executes multiple CRUD or FUNCTION steps inside a single MySQL transaction. If a
 | `handler` | Hook function name (FUNCTION steps) |
 | `customQuery` | Optional SQL string for a CRUD step, executed directly on the transaction connection |
 | `pagination` | Optional `true` to paginate a custom SELECT step; page defaults to 1 and limit to 10 |
+| `forEach` | Optional request-body property containing an array; run this CRUD step once for each object in that array |
+
+Use `forEach` when one request should insert or update multiple rows in a table. The table and operation remain fixed in configuration; `forEach` only selects which body array supplies the row values. For `UPDATE`, every item must contain an `id`, which is used as the row key. List writable fields in `columns` and omit `id` unless it is also a field you intend to change.
+
+```json
+{
+  "type": "TRANSACTION",
+  "endpoint": "/payments/reconcile",
+  "method": "POST",
+  "steps": [
+    {
+      "type": "CRUD",
+      "operation": "UPDATE",
+      "table": "orders",
+      "columns": ["amount"],
+      "forEach": "order",
+      "saveAs": "updatedOrders"
+    },
+    {
+      "type": "CRUD",
+      "operation": "CREATE",
+      "table": "payments",
+      "columns": ["id", "amount"],
+      "forEach": "payment",
+      "saveAs": "createdPayments"
+    }
+  ]
+}
+```
+
+Send arrays under those configured property names:
+
+```json
+{
+  "order": [
+    { "id": 101, "amount": 25.50 },
+    { "id": 102, "amount": 18.00 }
+  ],
+  "payment": [
+    { "id": 501, "amount": 25.50 },
+    { "id": 502, "amount": 18.00 }
+  ]
+}
+```
+
+Each row is processed sequentially on the transaction connection. If a row or later step throws an error, the transaction rolls back. A missing/non-array property or a non-object array item is an error; an empty array performs no operations and returns an empty result array. Each `saveAs` value is the array of per-row results. An UPDATE for an ID that matches no row returns `null` for that item, consistent with single-row updates; it does not by itself trigger rollback.
 
 A transaction can also specify `customQuery` at its top level to run one SQL statement in the transaction instead of `steps`. Per-step custom queries run within the same transaction as the other steps:
 

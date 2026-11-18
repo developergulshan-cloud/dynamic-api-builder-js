@@ -20,7 +20,7 @@ function example1_BasicSetup() {
       host: 'localhost',
       user: 'root',
       password: 'password',
-      database: 'mydb'
+      database: 'user_management'
     },
     apis: [
       {
@@ -37,16 +37,16 @@ function example1_BasicSetup() {
           password: 'required|string|min:8'
         }
       },
-      // {
-      //   id: 'get-users',
-      //   endpoint: '/users',
-      //   method: 'GET',
-      //   type: 'CRUD',
-      //   operation: 'READ',
-      //   table: 'users',
-      //   filters: ['name', 'email'],
-      //   pagination: true
-      // }
+      {
+        id: 'get-users',
+        endpoint: '/users',
+        method: 'GET',
+        type: 'CRUD',
+        operation: 'READ',
+        table: 'um_users',
+        filters: ['name', 'email'],
+        pagination: true
+      }
     ]
   };
 
