@@ -31,7 +31,10 @@ class DabExecutor {
                     req.query,
                     filters,
                     filterConfig,
-                    operation === 'CREATE' || operation === 'UPDATE' ? req.body : undefined
+                    operation === 'CREATE' || operation === 'UPDATE' ? req.body : {
+                        ...req.query,
+                        ...req.params
+                    }
                 );
             } else {
                 switch (operation) {
@@ -87,7 +90,8 @@ class DabExecutor {
                     apiConfig.pagination,
                     req.query,
                     apiConfig.filters,
-                    apiConfig.filterConfig
+                    apiConfig.filterConfig,
+                    { ...req.query, ...req.params }
                 );
                 await database.commit(connection);
                 connection = null;
@@ -534,7 +538,10 @@ class DabExecutor {
                 req.query,
                 step.filters,
                 step.filterConfig,
-                step.operation === 'CREATE' || step.operation === 'UPDATE' ? req.body : undefined
+                step.operation === 'CREATE' || step.operation === 'UPDATE' ? req.body : {
+                    ...req.query,
+                    ...req.params
+                }
             );
         }
 

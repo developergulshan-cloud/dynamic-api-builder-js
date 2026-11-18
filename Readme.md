@@ -15,6 +15,7 @@ A **configuration-driven REST API generator** for Node.js. Define your entire AP
   - [Root Config Object](#root-config-object)
   - [API Types](#api-types)
     - [CRUD](#1-crud)
+    - [How to use customQuery](#how-to-use-customquery)
     - [TRANSACTION](#2-transaction)
     - [FUNCTION](#3-function)
     - [CALL\_FUNCTION](#4-call_function)
@@ -367,6 +368,146 @@ For custom SQL with placeholders, list the matching request parameter names in `
 ```
 
 `PUT /api/users/42` with body `{"name":"Ada","address":"London","id":42}` binds those values to the three placeholders. Configure the names in SQL placeholder order. The configured SQL is used as written; DAB does not append additional filter conditions.
+
+#### How to use `customQuery`
+
+`customQuery` lets an API run SQL that DAB cannot express with the standard `table`, `columns`, `joins`, and CRUD fields. It is supported on a `CRUD` API, on a `TRANSACTION` API as one top-level statement, and on an individual `CRUD` transaction step. Put the SQL in the API configuration; do not put SQL in the HTTP request.
+
+```json
+{
+  "id": "get-active-users",
+  "endpoint": "/users/search",
+  "method": "GET",
+  "type": "CRUD",
+  "operation": "READ",
+  "customQuery": "SELECT id, name, email FROM users WHERE active = 1"
+}
+```
+
+Call it with `GET /api/users/search`. A custom query must be a non-empty SQL string. When `customQuery` is present, it takes precedence over generated CRUD SQL; fields like `table`, `columns`, and `joins` do not change that SQL. The configured database for the API is still used.
+
+##### Choose how values get into the SQL
+
+Use positional `?` placeholders for request-provided values. Add one matching name to `filters` for each placeholder, in the same left-to-right order. Values are passed to the database as parameters, not pasted into the SQL text.
+
+For `READ`, DAB looks up each name in URL route parameters (`req.params`) first, then in the URL query string (`req.query`). For `CREATE` and `UPDATE`, it looks them up in the JSON request body (`req.body`). The name `filters` is a binding-name list in this mode; DAB does not add generated WHERE clauses.
+
+This supports route-based custom queries such as `/user/:id`:
+
+```json
+{
+  "id": "get-user",
+  "endpoint": "/user/:id",
+  "method": "GET",
+  "type": "CRUD",
+  "operation": "READ",
+  "customQuery": "SELECT * FROM um_users WHERE id = ?",
+  "filters": ["id"]
+}
+```
+
+Call `GET /api/user/123`; the `id` route parameter is bound to the SQL placeholder. If both a route parameter and a query parameter use the same name, the route parameter takes precedence for placeholder binding.
+
+```json
+{
+  "id": "find-user-by-email",
+  "endpoint": "/users/by-email",
+  "method": "GET",
+  "type": "CRUD",
+  "operation": "READ",
+  "filters": ["email"],
+  "customQuery": "SELECT id, name, email FROM users WHERE email = ?"
+}
+```
+
+Request: `GET /api/users/by-email?email=ada@example.com`
+
+```json
+{
+  "id": "update-user-profile",
+  "endpoint": "/users/:id/profile",
+  "method": "PATCH",
+  "type": "CRUD",
+  "operation": "UPDATE",
+  "filters": ["name", "address", "id"],
+  "customQuery": "UPDATE users SET name = ?, address = ? WHERE id = ?",
+  "validation": {
+    "name": "required|string",
+    "address": "required|string",
+    "id": "required|number"
+  }
+}
+```
+
+Request: `PATCH /api/users/42/profile` with JSON body `{"name":"Ada","address":"London","id":42}`. The route parameter `:id` is not automatically bound; include `id` in the body (or use a hook to copy it there). For writes, `filters` must name body fields in SQL placeholder order. A placeholder with no corresponding `filters` entry, or a name whose value is missing (`undefined`), causes an execution error. `null`, `0`, and `false` are valid supplied values.
+
+DAB counts `?` placeholders outside quoted strings and SQL comments. It converts those placeholders to `$1`, `$2`, etc. for PostgreSQL; for MySQL they remain `?`. Use `?` in the config for both supported database types.
+
+##### Use automatic READ filters instead
+
+If your custom SELECT has no placeholders, you can configure `filters` as the list of result columns that clients may filter. DAB wraps the SELECT and adds parameterized conditions for non-empty matching query parameters. This works best when filter names are columns (or aliases) returned by the SELECT.
+
+```json
+{
+  "id": "search-users",
+  "endpoint": "/users/search",
+  "method": "GET",
+  "type": "CRUD",
+  "operation": "READ",
+  "customQuery": "SELECT id, first_name, email FROM users WHERE active = 1",
+  "filters": ["email", "first_name"],
+  "filterConfig": {
+    "first_name": { "operator": "LIKE" }
+  },
+  "pagination": true
+}
+```
+
+`GET /api/users/search?email=ada@example.com&first_name=Ada&page=2&limit=25` applies equality on `email`, a contains-style `LIKE` on `first_name`, and pagination. A comma-separated value with the default `=` operator becomes an `IN` filter; for example `?email=a@example.com,b@example.com`. `filterConfig` supports the same operators as [Filters & Pagination](#filters--pagination). `_or` works when `filterConfig.orFields` is configured, as described there.
+
+With `pagination: true`, DAB wraps the custom SELECT and applies `LIMIT` and `OFFSET`. `page` defaults to `1`, `limit` defaults to `10`, and offset is `(page - 1) * limit`. The custom SQL must be a SELECT that is valid as a subquery (without a trailing semicolon; DAB strips one when wrapping). Avoid combining `pagination: true` with placeholder-based custom SQL on non-SELECT statements. With placeholders, DAB still wraps the SQL when pagination is enabled, which is intended for SELECTs.
+
+##### Validate request values
+
+Use the API's normal `validation` object to validate bound values. GET validation reads query parameters; non-GET validation reads the body. A validation rule only checks a value when it is configured; `filters` by itself is not a required-field declaration. Add `required` rules for required bindings. Refer to [Validation Rules](#validation-rules) for available rules.
+
+##### Use custom SQL in a transaction
+
+A transaction can run one custom statement at its top level, or mix custom SQL CRUD steps with other steps. Top-level transaction custom SQL and custom SQL steps can bind `READ` placeholders from route parameters first, then query parameters; a step whose `operation` is `CREATE` or `UPDATE` binds from the request body. All step executions share the transaction connection, and a failure rolls the transaction back.
+
+```json
+{
+  "id": "reserve-stock",
+  "endpoint": "/inventory/reserve",
+  "method": "POST",
+  "type": "TRANSACTION",
+  "steps": [
+    {
+      "type": "CRUD",
+      "operation": "UPDATE",
+      "filters": ["quantity", "productId"],
+      "customQuery": "UPDATE inventory SET quantity = quantity - ? WHERE product_id = ?"
+    },
+    {
+      "type": "CRUD",
+      "operation": "CREATE",
+      "table": "reservations",
+      "columns": ["product_id", "quantity"]
+    }
+  ]
+}
+```
+
+Send `quantity` and `productId` in the body. Transaction steps can also set `pagination`, `filters`, and `filterConfig` when using a SELECT. Top-level transaction custom queries accept the same options on the transaction API object.
+
+##### Safety and troubleshooting
+
+- Keep SQL text static and trusted. Never concatenate or interpolate request values into `customQuery`; use `?` placeholders and `filters` bindings for values.
+- Placeholders bind values, not SQL identifiers. For dynamic table names, column names, or sort directions, choose from a fixed allowlist in application code or expose separate configured endpoints.
+- The SQL itself is powerful configuration and can read or modify any data allowed by the database account. Use a least-privilege database user.
+- When a placeholder count error occurs, count the actual `?` markers outside SQL strings/comments and provide exactly that many names in `filters`.
+- When a missing parameter error occurs, check that every configured name exists in `req.query` (GET) or `req.body` (CREATE/UPDATE); spelling and case must match.
+- For automatic filters, remove placeholders from the custom SQL and ensure each filter names a selected output column. If you need SQL-specific parameters and extra filters together, put those values in the SQL's placeholders; DAB treats placeholder mode and generated-filter mode as alternatives.
 
 **Operation behaviours:**
 
