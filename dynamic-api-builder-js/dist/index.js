@@ -1,7 +1,7 @@
 /**
  * dab-api-module v1.0.3
  * Low-Code API Platform — Configuration-driven REST API generator
- * Build date : 2026-11-17T05:56:29.934Z
+ * Build date : 2026-11-18T07:17:32.205Z
  * Node target: node20
  */
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -46550,7 +46550,10 @@ var require_executor = __commonJS({
               req.query,
               filters,
               filterConfig,
-              operation === "CREATE" || operation === "UPDATE" ? req.body : void 0
+              operation === "CREATE" || operation === "UPDATE" ? req.body : {
+                ...req.query,
+                ...req.params
+              }
             );
           } else {
             switch (operation) {
@@ -46599,7 +46602,8 @@ var require_executor = __commonJS({
               apiConfig.pagination,
               req.query,
               apiConfig.filters,
-              apiConfig.filterConfig
+              apiConfig.filterConfig,
+              { ...req.query, ...req.params }
             );
             await database.commit(connection);
             connection = null;
@@ -46967,7 +46971,10 @@ var require_executor = __commonJS({
             req.query,
             step.filters,
             step.filterConfig,
-            step.operation === "CREATE" || step.operation === "UPDATE" ? req.body : void 0
+            step.operation === "CREATE" || step.operation === "UPDATE" ? req.body : {
+              ...req.query,
+              ...req.params
+            }
           );
         }
         const { operation, table, columns, map } = step;
