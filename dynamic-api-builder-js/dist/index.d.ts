@@ -30,6 +30,16 @@ export interface DatabaseConfig {
     port?: number;
 }
 
+/** A named database pool entry, used in `DabConfig.databases`. */
+export interface NamedDatabaseConfig {
+    /** Database driver for this connection; defaults to `mysql`. */
+    type?: DatabaseType;
+    /** Connection credentials and target database. */
+    database: DatabaseConfig;
+    /** Max pool connections; defaults to 10. */
+    connectionLimit?: number;
+}
+
 export interface DabConfig {
     /** Array of API endpoint definitions */
     apis: ApiDefinition[];
@@ -39,6 +49,10 @@ export interface DabConfig {
     type?: DatabaseType;
     /** Max pool connections – defaults to 10 */
     connectionLimit?: number;
+    /** Named database pools. Each API may select one with its `database` field. */
+    databases?: Record<string, NamedDatabaseConfig>;
+    /** Default pool name; defaults to the first key in `databases`. */
+    defaultDatabase?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +98,15 @@ export interface TransactionStep {
     columns?: string[];
     /** Maps target keys to values from previous step results, e.g. { user_id: "$createUser.id" } */
     map?: Record<string, string>;
+    /** Request body array property; repeat this CRUD step for each object (bulk CREATE/UPDATE). */
+    forEach?: string;
+    /** Run configured SQL instead of generated CRUD SQL. */
+    customQuery?: string;
+    /** READ filter names or, with placeholders, ordered request-body binding names. */
+    filters?: string[];
+    filterConfig?: FilterConfig;
+    /** Apply page/limit pagination to a SELECT query. */
+    pagination?: boolean;
     handler?: string;
     saveAs?: string;
 }
@@ -106,6 +129,10 @@ export interface ApiDefinition {
     pagination?: boolean;
     hooks?: HooksConfig;
     validation?: ValidationRules;
+    /** Selects a named connection from `DabConfig.databases`. */
+    database?: string;
+    /** Trusted SQL to execute instead of generated CRUD SQL. Use `?` for bound values. */
+    customQuery?: string;
 
     // TRANSACTION fields
     steps?: TransactionStep[];
@@ -452,4 +479,4 @@ declare function dabApi(config: DabConfig, options?: DabRouterOptions): DabApiIn
 export default dabApi;
 
 // Named re-exports (mirror of module.exports.DabXxx)
-export { DabRouter, DabValidator, DabExecutor, DabQueryBuilder, DabHooks, DabResponse };
+// export { DabRouter, DabValidator, DabExecutor, DabQueryBuilder, DabHooks, DabResponse };

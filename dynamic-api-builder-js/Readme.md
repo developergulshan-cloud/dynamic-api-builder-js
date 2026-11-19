@@ -494,6 +494,114 @@ try {
 
 ---
 
+### Examples for recent enhancements
+
+#### Use two database connections
+
+Each named database entry uses `type` for the driver and `database` for connection settings. An API can select a connection with its `database` property; APIs without it use `defaultDatabase` (or the first configured connection).
+
+```js
+const { router } = dabApi({
+  defaultDatabase: 'primary',
+  databases: {
+    primary: {
+      type: 'postgres',
+      database: {
+        host: 'localhost', user: 'app', password: process.env.PG_PASSWORD,
+        database: 'main_db', port: 5432
+      }
+    },
+    archive: {
+      type: 'mysql',
+      database: {
+        host: 'localhost', user: 'app', password: process.env.MYSQL_PASSWORD,
+        database: 'archive_db', port: 3306
+      }
+    }
+  },
+  apis: [
+    { endpoint: '/users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users' },
+    { endpoint: '/archive/users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users', database: 'archive' }
+  ]
+});
+
+app.use('/api', router);
+```
+
+#### Bind request values in custom SQL
+
+Use `?` placeholders and list matching request field names in `filters` order. For a READ, values come from route parameters first and then query parameters. DAB converts placeholders to PostgreSQL `$1`, `$2`, etc. when needed.
+
+```js
+const config = {
+  database: { host: 'localhost', user: 'app', password: process.env.DB_PASSWORD, database: 'app_db' },
+  apis: [{
+    id: 'user-by-id',
+    endpoint: '/users/:id',
+    method: 'GET',
+    type: 'CRUD',
+    operation: 'READ',
+    customQuery: 'SELECT id, name, email FROM users WHERE id = ?',
+    filters: ['id']
+  }]
+};
+
+const { router } = dabApi(config);
+app.use('/api', router);
+// GET /api/users/42 binds 42 to the SQL placeholder.
+```
+
+For write queries, bind from the JSON body and list names in SQL placeholder order:
+
+```js
+{
+  id: 'update-user-name',
+  endpoint: '/users/:id/name',
+  method: 'PATCH',
+  type: 'CRUD',
+  operation: 'UPDATE',
+  customQuery: 'UPDATE users SET name = ? WHERE id = ?',
+  filters: ['name', 'id']
+}
+```
+
+Send `{"name":"Ada","id":42}` as the body. Keep SQL text trusted and static; never interpolate user input into `customQuery`.
+
+#### Repeat a transaction step for each request item
+
+Set `forEach` to the name of an array in the request body. DAB runs that CRUD step once per object and stores an array of results under `saveAs`.
+
+```js
+{
+  id: 'add-order-items',
+  endpoint: '/orders/:id/items',
+  method: 'POST',
+  type: 'TRANSACTION',
+  steps: [
+    {
+      type: 'CRUD',
+      operation: 'CREATE',
+      table: 'orders',
+      columns: ['customer_id', 'total'],
+      saveAs: 'order'
+    },
+    {
+      type: 'CRUD',
+      operation: 'CREATE',
+      table: 'order_items',
+      columns: ['order_id', 'product_id', 'quantity'],
+      forEach: 'items',
+      saveAs: 'createdItems',
+      map: { order_id: '$order.id' }
+    }
+  ]
+}
+```
+
+Send a body like `{"customer_id":3,"total":125,"items":[{"product_id":7,"quantity":2},{"product_id":9,"quantity":1}]}`. Each item must be an object. The transaction rolls back if a step fails.
+
+---
+
 ## API Reference
 
 ### `dabApi(config, options?)`

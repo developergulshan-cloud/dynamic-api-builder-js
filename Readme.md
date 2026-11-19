@@ -1,304 +1,202 @@
-# dynamic-api-js
+# dynamic-api-builder-js
 
-A **configuration-driven REST API generator** for Node.js. Define your entire API surface in a single JSON file — dynamic-api-js auto-generates Express routes, handles validation, executes database queries, runs lifecycle hooks, and calls stored procedures/functions, all without writing repetitive boilerplate.
+Build Express REST endpoints from JavaScript or JSON configuration. DAB registers routes, validates requests, builds parameterized CRUD queries, runs transaction steps, invokes registered JavaScript hooks, and can call database functions and procedures.
 
----
+> **Package name:** `dab-api-module` (from this repository's `package.json`). The checked-in declaration file and examples also use `dynamic-api-builder-js`; use the package name you installed in `require()`/`import`.
 
-## Table of Contents
+## Contents
 
-- [Features](#features)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Build System](#build-system)
-- [Configuration Reference](#configuration-reference)
-  - [Root Config Object](#root-config-object)
-  - [API Types](#api-types)
-    - [CRUD](#1-crud)
-    - [How to use customQuery](#how-to-use-customquery)
-    - [TRANSACTION](#2-transaction)
-    - [FUNCTION](#3-function)
-    - [CALL\_FUNCTION](#4-call_function)
-    - [CALL\_PROCEDURE](#5-call_procedure)
-  - [Validation Rules](#validation-rules)
-  - [Hooks](#hooks)
-  - [Filters & Pagination](#filters--pagination)
-  - [Joins](#joins)
-  - [Parameter Sources](#parameter-sources)
-- [Environment Variables](#environment-variables)
-- [Advanced Usage](#advanced-usage)
-  - [Custom Middleware](#custom-middleware)
-  - [Registering Custom Hooks](#registering-custom-hooks)
-- [API Response Format](#api-response-format)
-- [Health Check](#health-check)
-- [Complete api.json Example](#complete-apijson-example)
+- [Requirements and install](#requirements-and-install)
+- [Quick start](#quick-start)
+- [Root configuration](#root-configuration)
+- [API definition reference](#api-definition-reference)
+- [CRUD APIs](#crud-apis)
+- [Filters, joins, and pagination](#filters-joins-and-pagination)
+- [Validation](#validation)
+- [Hooks and functions](#hooks-and-functions)
+- [Transactions](#transactions)
+- [Stored database functions and procedures](#stored-database-functions-and-procedures)
+- [Custom SQL](#custom-sql)
+- [Router middleware](#router-middleware)
+- [Responses and errors](#responses-and-errors)
+- [Advanced query builder](#advanced-query-builder)
+- [Configuration checklist](#configuration-checklist)
 
----
+## Requirements and install
 
-## Features
-
-- **Zero-boilerplate CRUD** — map HTTP routes to DB tables in JSON
-- **Multi-step Transactions** — chain INSERT/UPDATE steps with result passing
-- **Stored Procedure & Function calls** — invoke DB callables with typed param sources
-- **Custom Function hooks** — before/after hooks per API, plus standalone function endpoints
-- **Built-in validation** — pipe-separated rule strings (`required|email|min:8`)
-- **Advanced filters** — equality, LIKE, IN (comma-separated), OR groups, operators
-- **JOIN support** — INNER, LEFT, RIGHT joins configured declaratively
-- **Pagination** — query-driven `?page=&limit=` pagination
-- **Self-contained bundle** — esbuild bundles everything into a single `dist/index.js`; no `node_modules` needed at runtime
-
----
-
-## Project Structure
-
-```
-dynamic-api-js/
-├── api.json                  # API definitions (your config file)
-├── server.js                 # Example Express server entry point
-├── example.js                # Usage examples
-├── build.js                  # esbuild-based build script
-├── .env                      # Environment variables
-├── package.json
-└── src/
-    ├── index.js              # Module entry — initializes and exports dynamic-api-js
-    ├── router/
-    │   └── dynamicRouter.js  # Auto-generates Express routes from config
-    ├── engine/
-    │   ├── executor.js       # Executes CRUD, TRANSACTION, FUNCTION, CALL_*
-    │   ├── validator.js      # Request validation engine
-    │   ├── hooks.js          # Lifecycle hook registry and built-in hooks
-    │   └── response.js       # Response shaping utilities
-    ├── db/
-    │   └── queryBuilder.js   # MySQL query builder & connection pool
-    └── utills/
-        └── error.js          # Error handling utilities
-```
-
----
-
-## Installation
+Use Node.js with an Express application. Install this package and Express in your application:
 
 ```bash
-# Clone / unzip the project
-cd dynamic-api-js
-
-# Install dependencies
-npm install
-
-# Copy and configure environment variables
-cp .env .env.local   # edit with your DB credentials
+npm i dynamic-api-builder-js
 ```
 
-**Runtime dependencies** (bundled into `dist/` at build time):
-
-| Package | Purpose |
-|---|---|
-| `mysql2` | MySQL/MariaDB connection pool |
-| `bcryptjs` | Password hashing hook |
-| `cors` | Cross-origin headers |
-
-**Dev dependencies** (only needed to build or run the dev server):
-
-| Package | Purpose |
-|---|---|
-| `esbuild` | Fast JS bundler |
-| `express` | HTTP server (dev server only) |
-
----
-
-## Quick Start
-
-### 1. Configure your database
-
-Edit `.env`:
-
-```env
-DB_HOST=localhost
-DB_USER=root
-DB_PASS=yourpassword
-DB_NAME=your_database
-```
-
-### 2. Define your APIs
-
-Create or edit `api.json`:
-
-```json
-{
-  "version": "1.0",
-  "basePath": "/api",
-  "apis": [
-    {
-      "id": "get-users",
-      "endpoint": "/users",
-      "method": "GET",
-      "type": "CRUD",
-      "operation": "READ",
-      "table": "users",
-      "columns": ["id", "name", "email"],
-      "filters": ["email"],
-      "pagination": true
-    }
-  ]
-}
-```
-
-### 3. Build the module
-
-```bash
-npm run build
-```
-
-### 4. Start the server
-
-```bash
-npm start
-```
-
-The server starts at `http://localhost:3000`. Test the health endpoint:
-
-```bash
-curl http://localhost:3000/health
-# {"status":"ok","message":"dynamic-api-js is running"}
-```
-
-Call your generated API:
-
-```bash
-curl "http://localhost:3000/api/users?page=1&limit=10&email=test@example.com"
-```
-
----
-
-## Build System
-
-dynamic-api-js uses **esbuild** to compile `src/` into a fully self-contained `dist/index.js`. Every dependency is inlined — you can ship `dist/index.js` without any `node_modules`.
-
-| Command | Description |
-|---|---|
-| `npm run build` | Production build — minified, tree-shaken, no sourcemap |
-| `npm run build:dev` | Development build — readable output with inline sourcemaps |
-| `npm run build:watch` | Watch mode — rebuilds automatically on file changes |
-| `npm run build:analyze` | Production build + per-module size report in `dist/meta.json` |
-| `npm start` | Run the dev server with Node.js `--watch` (auto-restarts) |
-
-### Build output
-
-```
-dist/
-├── index.js       # Self-contained bundle (required at runtime)
-└── meta.json      # Bundle analysis (only created with --analyze)
-```
-
-### Using the built module in your own Express app
+The module bundles its database drivers (`mysql2` and `pg`) in the published build. Configure one driver per connection. Request JSON parsing must be installed before the DAB router:
 
 ```js
-const express   = require('express');
-const dynamicApi = require('./dist/index');   // the built bundle
-const apis       = require('./api.json');
+app.use(express.json());
+```
+
+## Quick start
+
+This complete CommonJS example creates a MySQL-backed read and create endpoint. Replace the credentials and table/column names with your schema.
+
+```js
+const express = require('express');
+const dabApi = require('dab-api-module');
 
 const app = express();
 app.use(express.json());
 
-const { router } = dynamicApi({
+const { router } = dabApi({
+  type: 'mysql',
   database: {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    host: process.env.DB_HOST || '127.0.0.1',
+    user: process.env.DB_USER || 'app_user',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'app_db',
+    port: 3306
   },
-  apis: apis.apis
+  apis: [
+    {
+      id: 'list-users',
+      endpoint: '/users',
+      method: 'GET',
+      type: 'CRUD',
+      operation: 'READ',
+      table: 'users',
+      columns: ['id', 'name', 'email'],
+      filters: ['email'],
+      pagination: true
+    },
+    {
+      id: 'create-user',
+      endpoint: '/users',
+      method: 'POST',
+      type: 'CRUD',
+      operation: 'CREATE',
+      table: 'users',
+      columns: ['name', 'email'],
+      validation: {
+        name: 'required|string|min:2',
+        email: 'required|email'
+      }
+    }
+  ]
 });
 
 app.use('/api', router);
-app.listen(3000);
+app.listen(3000, () => console.log('Listening on http://localhost:3000'));
 ```
 
----
+Try it:
 
-## Configuration Reference
-
-All API behaviour is driven by the `apis` array in your config object (or `api.json`).
-
-### Root Config Object
-
-```js
-dynamicApi({
-  database: { ... },   // MySQL connection options
-  apis: [ ... ]        // Array of API definition objects
-});
+```bash
+curl 'http://localhost:3000/api/users?page=1&limit=20&email=ada@example.com'
+curl -X POST http://localhost:3000/api/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada Lovelace","email":"ada@example.com"}'
 ```
 
-For APIs that use two databases at the same time, configure each connection by name and select it on each API:
+## Root configuration
+
+Call the exported function with a configuration object and optional router options:
 
 ```js
-dynamicApi({
-  defaultDatabase: 'postgres',
+const { router, validator, executor, queryBuilder, hooks, response } = dabApi(config, options);
+```
+
+| Root field | Type | Required | Meaning |
+|---|---|---:|---|
+| `apis` | array | Yes | Route definitions. An empty array is valid. |
+| `type` | `mysql` or `postgres` | No | Driver for a single connection; defaults to `mysql`. |
+| `database` | object | No* | Single connection settings; can also be passed directly as the root fields. |
+| `databases` | object | No* | Map of connection names to database configs. |
+| `defaultDatabase` | string | No | Default named connection; defaults to the first key in `databases`. |
+| `connectionLimit` | number | No | Pool size, defaults to `10`. |
+
+*Database configuration is needed for database-backed APIs. A `FUNCTION` handler can be used without a DB pool.
+
+### Single database
+
+```js
+const config = {
+  type: 'postgres', // 'mysql' or 'postgres'; default: 'mysql'
+  database: {
+    host: 'localhost',
+    user: 'app_user',
+    password: process.env.DB_PASSWORD,
+    database: 'app_db',
+    port: 5432
+  },
+  connectionLimit: 10,
+  apis: []
+};
+```
+
+Supported connection fields: `host` (default `localhost`), `user` (default `root`), `password` (default empty string), `database` (default empty string; provide a real database), and `port` (default `3306` for MySQL, `5432` for PostgreSQL). Pool settings are internally configured; `connectionLimit` defaults to 10. Keep credentials in environment variables and out of source control.
+
+The equivalent flat form is supported:
+
+```js
+const config = {
+  type: 'mysql',
+  host: 'localhost',
+  user: 'app_user',
+  password: process.env.DB_PASSWORD,
+  database: 'app_db',
+  port: 3306,
+  apis: []
+};
+```
+
+### Named databases
+
+Each entry has the same shape as the single database configuration. Set an API's `database` property to select a named connection.
+
+```js
+const config = {
+  defaultDatabase: 'primary',
   databases: {
-    postgres: {
+    primary: {
       type: 'postgres',
-      database: {
-        host: process.env.PG_HOST,
-        user: process.env.PG_USER,
-        password: process.env.PG_PASS,
-        database: process.env.PG_NAME,
-        port: 5432
-      }
+      database: { host: 'localhost', user: 'app', password: process.env.PG_PASSWORD, database: 'main', port: 5432 }
     },
-    mysql: {
+    archive: {
       type: 'mysql',
-      database: {
-        host: process.env.MYSQL_HOST,
-        user: process.env.MYSQL_USER,
-        password: process.env.MYSQL_PASS,
-        database: process.env.MYSQL_NAME,
-        port: 3306
-      }
+      database: { host: 'localhost', user: 'app', password: process.env.MYSQL_PASSWORD, database: 'archive', port: 3306 }
     }
   },
   apis: [
     { endpoint: '/users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users' },
-    { endpoint: '/legacy-users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users', database: 'mysql' }
+    { endpoint: '/old-users', method: 'GET', type: 'CRUD', operation: 'READ', table: 'users', database: 'archive' }
   ]
-});
+};
 ```
 
-Each configured database has its own connection pool. An API's optional `database` field chooses that pool; APIs without the field use `defaultDatabase` (the first configured database if omitted). The existing single `database` configuration remains supported.
+## API definition reference
 
-**`database` options:**
-
-| Field | Default | Description |
-|---|---|---|
-| `host` | `localhost` | MySQL server host |
-| `user` | `root` | MySQL user |
-| `password` | `""` | MySQL password |
-| `database` | *(required)* | Database name |
-| `port` | `3306` | MySQL port |
-| `connectionLimit` | `10` | Connection pool size |
-
----
-
-### API Types
-
-Every API definition object shares these common top-level fields:
+Each item in `apis` becomes one Express route. Common fields:
 
 | Field | Required | Description |
-|---|---|---|
-| `id` | Recommended | Unique identifier (used in logs) |
-| `name` | Optional | Human-readable label |
-| `endpoint` | **Yes** | Route path (e.g. `/users`, `/users/:id`) |
-| `method` | **Yes** | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH` |
-| `type` | **Yes** | API type — see below |
-| `permission` | Optional | Permission key (informational, for your auth middleware) |
-| `validation` | Optional | Validation rules object |
-| `hooks` | Optional | `{ before: "hookName", after: "hookName" }` |
-| `database` | Optional | Name of the configured database connection to use; defaults to `defaultDatabase` |
+|---|---:|---|
+| `id` | No | Label for your own identification/logging. |
+| `name` | No | Descriptive label; currently not used to change runtime behavior. |
+| `endpoint` | Yes | Express path, such as `/users` or `/users/:id`. |
+| `method` | Yes | `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. |
+| `type` | Yes | `CRUD`, `TRANSACTION`, `FUNCTION`, `CALL_FUNCTION`, or `CALL_PROCEDURE`. |
+| `database` | No | Named connection to use when `databases` is configured. Omit for the default/single connection. |
+| `validation` | No | Map of request field names to validation rule strings. |
+| `hooks` | No | `{ "before": "hookName", "after": "hookName" }` for supported API types. |
 
----
+Route paths are mounted beneath the prefix you pass to `app.use`. If `endpoint` is `/users/:id` and the mount prefix is `/api`, the URL is `/api/users/123`.
 
-#### 1. CRUD
+## CRUD APIs
 
-Maps an HTTP route to a single database table operation.
+`type: "CRUD"` requires `operation`: `CREATE`, `READ`, `UPDATE`, or `DELETE`.
+
+### Create
+
+Only request body properties listed in `columns` are inserted. Use `express.json()` before the router.
 
 ```json
 {
@@ -308,884 +206,354 @@ Maps an HTTP route to a single database table operation.
   "type": "CRUD",
   "operation": "CREATE",
   "table": "users",
-  "columns": ["name", "email", "password"],
-  "validation": {
-    "name": "required|string|min:3",
-    "email": "required|email",
-    "password": "required|string|min:8"
-  },
-  "hooks": {
-    "before": "hashPassword",
-    "after": "sendWelcomeEmail"
-  }
+  "columns": ["name", "email"]
 }
 ```
 
-**CRUD-specific fields:**
+Request: `POST /api/users` with `{"name":"Ada","email":"ada@example.com","is_admin":true}`. Only `name` and `email` are inserted. The response data includes the inserted values and an `id` when the driver returns one.
 
-| Field | Operations | Description |
-|---|---|---|
-| `operation` | All | `CREATE`, `READ`, `UPDATE`, `DELETE` |
-| `table` | All | Target database table |
-| `columns` | CREATE, UPDATE | Column names to insert/update. Use `["*"]` for SELECT all |
-| `filters` | READ | Query param names that become WHERE clauses |
-| `filterConfig` | READ | Per-filter operator config (see [Filters](#filters--pagination)) |
-| `pagination` | READ | `true` to enable `?page=&limit=` pagination |
-| `joins` | READ | Array of JOIN definitions (see [Joins](#joins)) |
-| `customQuery` | Any | SQL string to execute instead of building SQL from the CRUD fields |
+### Read
 
-When `customQuery` is set, it replaces the generated SQL. If the query has no `?` placeholders, `filters` and `filterConfig` are applied to the custom query's result columns using parameterized conditions. If it contains `?` placeholders, `filters` instead names the request parameters to bind to those placeholders, in order, and no generated filters are added. `READ` binds from query parameters; `CREATE` and `UPDATE` bind from the request body. Each placeholder must have a matching filter name and request value. PostgreSQL queries may use `?` in the configuration; DAB converts them to `$1`, `$2`, and so on. Other CRUD query fields such as `table`, `columns`, and `joins` are ignored.
-
-For example, this `READ` query binds from `req.query`:
+`columns` controls selected columns and defaults to `*`. `filters` controls which query parameters become `WHERE` conditions.
 
 ```json
 {
-  "id": "get-active-users",
-  "endpoint": "/users",
+  "id": "get-user",
+  "endpoint": "/users/:id",
   "method": "GET",
   "type": "CRUD",
   "operation": "READ",
-  "filters": ["email"],
-  "customQuery": "SELECT id, name, email FROM users WHERE active = 1",
-  "pagination": true
+  "table": "users",
+  "columns": ["id", "name", "email"],
+  "filters": ["status"]
 }
 ```
 
-`GET /api/users?email=person@example.com&page=2&limit=25` applies the configured filter and pagination to this query. When pagination is enabled, DAB wraps the custom SELECT and applies `LIMIT`/`OFFSET` (defaulting to page 1 and limit 10). Filter names must refer to columns returned by the custom SELECT. Custom SQL is trusted configuration: do not build it by interpolating untrusted request values.
+Note: standard READ uses query parameters for filters; the `:id` route parameter is not automatically added as a condition. To search by a route parameter, use `customQuery` with a placeholder or expose the ID as a query filter.
 
-For custom SQL with placeholders, list the matching request parameter names in `filters` order. For `CREATE`/`UPDATE`, these names are read from `req.body`:
+### Update
+
+Standard UPDATE matches the row using `req.params.id`. Therefore include `:id` in the endpoint. Only request body fields listed in `columns` are updated.
 
 ```json
 {
   "id": "update-user",
   "endpoint": "/users/:id",
-  "method": "PUT",
-  "type": "CRUD",
-  "operation": "UPDATE",
-  "filters": ["name", "address", "id"],
-  "customQuery": "UPDATE users SET name = ?, address = ? WHERE id = ?"
-}
-```
-
-`PUT /api/users/42` with body `{"name":"Ada","address":"London","id":42}` binds those values to the three placeholders. Configure the names in SQL placeholder order. The configured SQL is used as written; DAB does not append additional filter conditions.
-
-#### How to use `customQuery`
-
-`customQuery` lets an API run SQL that DAB cannot express with the standard `table`, `columns`, `joins`, and CRUD fields. It is supported on a `CRUD` API, on a `TRANSACTION` API as one top-level statement, and on an individual `CRUD` transaction step. Put the SQL in the API configuration; do not put SQL in the HTTP request.
-
-```json
-{
-  "id": "get-active-users",
-  "endpoint": "/users/search",
-  "method": "GET",
-  "type": "CRUD",
-  "operation": "READ",
-  "customQuery": "SELECT id, name, email FROM users WHERE active = 1"
-}
-```
-
-Call it with `GET /api/users/search`. A custom query must be a non-empty SQL string. When `customQuery` is present, it takes precedence over generated CRUD SQL; fields like `table`, `columns`, and `joins` do not change that SQL. The configured database for the API is still used.
-
-##### Choose how values get into the SQL
-
-Use positional `?` placeholders for request-provided values. Add one matching name to `filters` for each placeholder, in the same left-to-right order. Values are passed to the database as parameters, not pasted into the SQL text.
-
-For `READ`, DAB looks up each name in URL route parameters (`req.params`) first, then in the URL query string (`req.query`). For `CREATE` and `UPDATE`, it looks them up in the JSON request body (`req.body`). The name `filters` is a binding-name list in this mode; DAB does not add generated WHERE clauses.
-
-This supports route-based custom queries such as `/user/:id`:
-
-```json
-{
-  "id": "get-user",
-  "endpoint": "/user/:id",
-  "method": "GET",
-  "type": "CRUD",
-  "operation": "READ",
-  "customQuery": "SELECT * FROM um_users WHERE id = ?",
-  "filters": ["id"]
-}
-```
-
-Call `GET /api/user/123`; the `id` route parameter is bound to the SQL placeholder. If both a route parameter and a query parameter use the same name, the route parameter takes precedence for placeholder binding.
-
-```json
-{
-  "id": "find-user-by-email",
-  "endpoint": "/users/by-email",
-  "method": "GET",
-  "type": "CRUD",
-  "operation": "READ",
-  "filters": ["email"],
-  "customQuery": "SELECT id, name, email FROM users WHERE email = ?"
-}
-```
-
-Request: `GET /api/users/by-email?email=ada@example.com`
-
-```json
-{
-  "id": "update-user-profile",
-  "endpoint": "/users/:id/profile",
   "method": "PATCH",
   "type": "CRUD",
   "operation": "UPDATE",
-  "filters": ["name", "address", "id"],
-  "customQuery": "UPDATE users SET name = ?, address = ? WHERE id = ?",
-  "validation": {
-    "name": "required|string",
-    "address": "required|string",
-    "id": "required|number"
-  }
+  "table": "users",
+  "columns": ["name", "email"]
 }
 ```
 
-Request: `PATCH /api/users/42/profile` with JSON body `{"name":"Ada","address":"London","id":42}`. The route parameter `:id` is not automatically bound; include `id` in the body (or use a hook to copy it there). For writes, `filters` must name body fields in SQL placeholder order. A placeholder with no corresponding `filters` entry, or a name whose value is missing (`undefined`), causes an execution error. `null`, `0`, and `false` are valid supplied values.
+Request: `PATCH /api/users/42` with `{"name":"Ada"}`. If no row is updated, the route returns `204 No Content`.
 
-DAB counts `?` placeholders outside quoted strings and SQL comments. It converts those placeholders to `$1`, `$2`, etc. for PostgreSQL; for MySQL they remain `?`. Use `?` in the config for both supported database types.
+### Delete
 
-##### Use automatic READ filters instead
-
-If your custom SELECT has no placeholders, you can configure `filters` as the list of result columns that clients may filter. DAB wraps the SELECT and adds parameterized conditions for non-empty matching query parameters. This works best when filter names are columns (or aliases) returned by the SELECT.
+Standard DELETE also matches `req.params.id`.
 
 ```json
 {
-  "id": "search-users",
-  "endpoint": "/users/search",
+  "id": "delete-user",
+  "endpoint": "/users/:id",
+  "method": "DELETE",
+  "type": "CRUD",
+  "operation": "DELETE",
+  "table": "users"
+}
+```
+
+## Filters, joins, and pagination
+
+These options apply to standard READ and supported custom SELECT queries.
+
+| Field | Shape | Behavior |
+|---|---|---|
+| `filters` | string array | Permitted query parameter names to apply as filters. Missing/empty parameters are ignored. |
+| `filterConfig` | object | Per-field `operator`, plus optional `orFields` array. |
+| `pagination` | boolean | When `true`, reads `page` and `limit` from query string; defaults to page 1 and limit 10. |
+| `joins` | array | READ joins with `type`, `table`, and `condition`. |
+
+Supported comparison operators depend on the database and include common SQL comparisons such as `=`, `>`, `>=`, `<`, `<=`, and `LIKE`. A `LIKE` filter becomes a contains match (`%value%`). A comma-separated value with `=` becomes `IN (...)`.
+
+```json
+{
+  "id": "search-products",
+  "endpoint": "/products",
   "method": "GET",
   "type": "CRUD",
   "operation": "READ",
-  "customQuery": "SELECT id, first_name, email FROM users WHERE active = 1",
-  "filters": ["email", "first_name"],
+  "table": "products",
+  "columns": ["id", "name", "category", "price"],
+  "filters": ["category", "name", "price"],
   "filterConfig": {
-    "first_name": { "operator": "LIKE" }
+    "name": { "operator": "LIKE" },
+    "price": { "operator": "<=" },
+    "orFields": ["name", "category"]
   },
-  "pagination": true
-}
-```
-
-`GET /api/users/search?email=ada@example.com&first_name=Ada&page=2&limit=25` applies equality on `email`, a contains-style `LIKE` on `first_name`, and pagination. A comma-separated value with the default `=` operator becomes an `IN` filter; for example `?email=a@example.com,b@example.com`. `filterConfig` supports the same operators as [Filters & Pagination](#filters--pagination). `_or` works when `filterConfig.orFields` is configured, as described there.
-
-With `pagination: true`, DAB wraps the custom SELECT and applies `LIMIT` and `OFFSET`. `page` defaults to `1`, `limit` defaults to `10`, and offset is `(page - 1) * limit`. The custom SQL must be a SELECT that is valid as a subquery (without a trailing semicolon; DAB strips one when wrapping). Avoid combining `pagination: true` with placeholder-based custom SQL on non-SELECT statements. With placeholders, DAB still wraps the SQL when pagination is enabled, which is intended for SELECTs.
-
-##### Validate request values
-
-Use the API's normal `validation` object to validate bound values. GET validation reads query parameters; non-GET validation reads the body. A validation rule only checks a value when it is configured; `filters` by itself is not a required-field declaration. Add `required` rules for required bindings. Refer to [Validation Rules](#validation-rules) for available rules.
-
-##### Use custom SQL in a transaction
-
-A transaction can run one custom statement at its top level, or mix custom SQL CRUD steps with other steps. Top-level transaction custom SQL and custom SQL steps can bind `READ` placeholders from route parameters first, then query parameters; a step whose `operation` is `CREATE` or `UPDATE` binds from the request body. All step executions share the transaction connection, and a failure rolls the transaction back.
-
-```json
-{
-  "id": "reserve-stock",
-  "endpoint": "/inventory/reserve",
-  "method": "POST",
-  "type": "TRANSACTION",
-  "steps": [
-    {
-      "type": "CRUD",
-      "operation": "UPDATE",
-      "filters": ["quantity", "productId"],
-      "customQuery": "UPDATE inventory SET quantity = quantity - ? WHERE product_id = ?"
-    },
-    {
-      "type": "CRUD",
-      "operation": "CREATE",
-      "table": "reservations",
-      "columns": ["product_id", "quantity"]
-    }
+  "pagination": true,
+  "joins": [
+    { "type": "LEFT", "table": "categories", "condition": "products.category_id = categories.id" }
   ]
 }
 ```
 
-Send `quantity` and `productId` in the body. Transaction steps can also set `pagination`, `filters`, and `filterConfig` when using a SELECT. Top-level transaction custom queries accept the same options on the transaction API object.
+Examples: `GET /api/products?name=keyboard&price=100&page=2&limit=25` and `GET /api/products?_or=keyboard`. `_or` applies a LIKE search across `filterConfig.orFields`. Join `type` is `INNER`, `LEFT`, or `RIGHT`; table and condition are trusted configuration strings. Pagination limits rows but the current CRUD response does not include total-count metadata.
 
-##### Safety and troubleshooting
+## Validation
 
-- Keep SQL text static and trusted. Never concatenate or interpolate request values into `customQuery`; use `?` placeholders and `filters` bindings for values.
-- Placeholders bind values, not SQL identifiers. For dynamic table names, column names, or sort directions, choose from a fixed allowlist in application code or expose separate configured endpoints.
-- The SQL itself is powerful configuration and can read or modify any data allowed by the database account. Use a least-privilege database user.
-- When a placeholder count error occurs, count the actual `?` markers outside SQL strings/comments and provide exactly that many names in `filters`.
-- When a missing parameter error occurs, check that every configured name exists in `req.query` (GET) or `req.body` (CREATE/UPDATE); spelling and case must match.
-- For automatic filters, remove placeholders from the custom SQL and ensure each filter names a selected output column. If you need SQL-specific parameters and extra filters together, put those values in the SQL's placeholders; DAB treats placeholder mode and generated-filter mode as alternatives.
+`validation` maps field names to pipe-separated rules. GET APIs validate `req.query`; every other method validates `req.body`. Validation does not coerce values. Rules run in order and the first failure for a field is returned. Fields without `required` are optional.
 
-**Operation behaviours:**
-
-| Operation | HTTP | Route params | Body / Query used |
-|---|---|---|---|
-| `CREATE` | POST | — | `req.body` fields matching `columns` |
-| `READ` | GET | — | `req.query` for filters and pagination |
-| `UPDATE` | PUT/PATCH | `:id` | `req.body` fields matching `columns` |
-| `DELETE` | DELETE | `:id` | — |
-
----
-
-#### 2. TRANSACTION
-
-Executes multiple CRUD or FUNCTION steps inside a single MySQL transaction. If any step fails, the entire transaction rolls back.
+| Rule | Example | Meaning |
+|---|---|---|
+| `required` | `required` | Rejects undefined, null, or empty string. |
+| `string` | `string` | Value must be a string. |
+| `number` | `number` | Value must be a number or convertible to one. |
+| `boolean` | `boolean` | Accepts booleans or strings `true` / `false`. |
+| `array` | `array` | Value must be an array. |
+| `email` | `email` | Basic email format check. |
+| `url` | `url` | Must parse as a URL. |
+| `min:n` | `min:3` | Minimum length (or array length when applicable). |
+| `max:n` | `max:100` | Maximum length (or array length when applicable). |
+| `minValue:n` | `minValue:18` | Minimum numeric value. |
+| `maxValue:n` | `maxValue:120` | Maximum numeric value. |
+| `pattern:regex` | `pattern:^[A-Z]+$` | Must match the supplied regular expression. |
+| `in:a,b` | `in:draft,published` | Must equal one of the listed values. |
 
 ```json
 {
-  "id": "create-order",
-  "endpoint": "/orders",
-  "method": "POST",
-  "type": "TRANSACTION",
-  "steps": [
-    {
-      "type": "CRUD",
-      "operation": "CREATE",
-      "table": "orders",
-      "columns": ["user_id", "total"],
-      "saveAs": "order"
-    },
-    {
-      "type": "CRUD",
-      "operation": "CREATE",
-      "table": "order_items",
-      "columns": ["order_id", "product_id", "qty"],
-      "map": {
-        "order_id": "$order.id"
-      }
-    },
-    {
-      "type": "FUNCTION",
-      "handler": "updateInventory"
-    }
-  ]
-}
-```
-
-**Step fields:**
-
-| Field | Description |
-|---|---|
-| `type` | `CRUD` or `FUNCTION` |
-| `operation` | For CRUD steps: `CREATE` or `UPDATE` |
-| `table` | Target table (CRUD steps) |
-| `columns` | Columns to write (CRUD steps) |
-| `saveAs` | Key name to store this step's result for use by later steps |
-| `map` | Map fields from previous step results using `$stepName.field` syntax |
-| `handler` | Hook function name (FUNCTION steps) |
-| `customQuery` | Optional SQL string for a CRUD step, executed directly on the transaction connection |
-| `pagination` | Optional `true` to paginate a custom SELECT step; page defaults to 1 and limit to 10 |
-| `forEach` | Optional request-body property containing an array; run this CRUD step once for each object in that array |
-
-Use `forEach` when one request should insert or update multiple rows in a table. The table and operation remain fixed in configuration; `forEach` only selects which body array supplies the row values. For `UPDATE`, every item must contain an `id`, which is used as the row key. List writable fields in `columns` and omit `id` unless it is also a field you intend to change.
-
-```json
-{
-  "type": "TRANSACTION",
-  "endpoint": "/payments/reconcile",
-  "method": "POST",
-  "steps": [
-    {
-      "type": "CRUD",
-      "operation": "UPDATE",
-      "table": "orders",
-      "columns": ["amount"],
-      "forEach": "order",
-      "saveAs": "updatedOrders"
-    },
-    {
-      "type": "CRUD",
-      "operation": "CREATE",
-      "table": "payments",
-      "columns": ["id", "amount"],
-      "forEach": "payment",
-      "saveAs": "createdPayments"
-    }
-  ]
-}
-```
-
-Send arrays under those configured property names:
-
-```json
-{
-  "order": [
-    { "id": 101, "amount": 25.50 },
-    { "id": 102, "amount": 18.00 }
-  ],
-  "payment": [
-    { "id": 501, "amount": 25.50 },
-    { "id": 502, "amount": 18.00 }
-  ]
-}
-```
-
-Each row is processed sequentially on the transaction connection. If a row or later step throws an error, the transaction rolls back. A missing/non-array property or a non-object array item is an error; an empty array performs no operations and returns an empty result array. Each `saveAs` value is the array of per-row results. An UPDATE for an ID that matches no row returns `null` for that item, consistent with single-row updates; it does not by itself trigger rollback.
-
-A transaction can also specify `customQuery` at its top level to run one SQL statement in the transaction instead of `steps`. Per-step custom queries run within the same transaction as the other steps:
-
-```json
-{
-  "type": "TRANSACTION",
-  "steps": [
-    {
-      "type": "CRUD",
-      "customQuery": "UPDATE inventory SET quantity = quantity - 1 WHERE id = 42",
-      "saveAs": "inventoryUpdate"
-    }
-  ]
-}
-```
-
-Transaction-level and step-level custom queries can also specify `filters`, `filterConfig`, and `pagination`; filters are applied to the custom SELECT's result columns unless the custom SQL contains `?` placeholders, in which case `filters` provides the ordered binding names and no generated filters are added.
-
-**Result passing with `map`:**
-
-Use `$saveAsKey.field` to reference results from a previous step:
-
-```json
-"map": {
-  "order_id": "$order.id"
-}
-```
-
-This reads `id` from the result saved as `order` and assigns it to `order_id` before the INSERT.
-
----
-
-#### 3. FUNCTION
-
-Delegates the entire request to a registered hook function. Use this for complex logic that can't be expressed in CRUD config.
-
-```json
-{
-  "id": "custom-report",
-  "name": "Monthly Sales Report",
-  "endpoint": "/reports/monthly",
-  "method": "GET",
-  "type": "FUNCTION",
-  "handler": "monthlySalesReport"
-}
-```
-
-| Field | Description |
-|---|---|
-| `handler` | Name of the registered hook function to call |
-
-The handler receives `(req)` and must return the data payload. See [Registering Custom Hooks](#registering-custom-hooks).
-
----
-
-#### 4. CALL_FUNCTION
-
-Calls a **MySQL stored function** (`SELECT myFunc(...)`) and returns its scalar result.
-
-```json
-{
-  "id": "get-discount",
-  "name": "Get Discount",
-  "endpoint": "/discount",
-  "method": "POST",
-  "type": "CALL_FUNCTION",
-  "function": "get_discount",
-  "params": [
-    { "name": "user_id", "source": "body"   },
-    { "name": "amount",  "source": "body"   },
-    { "name": "promo",   "source": "body"   }
-  ],
   "validation": {
-    "user_id": "required|number",
-    "amount":  "required|number"
+    "name": "required|string|min:2|max:80",
+    "email": "required|email",
+    "age": "number|minValue:18|maxValue:120",
+    "status": "required|in:draft,published"
   }
 }
 ```
 
-| Field | Description |
-|---|---|
-| `function` | Name of the MySQL stored function |
-| `params` | Ordered array of parameter definitions (see [Parameter Sources](#parameter-sources)) |
+Invalid requests return HTTP 400 with an `error.details` array containing `{ field, message }` objects.
 
-**Response shape:**
+## Hooks and functions
+
+Hooks are registered in a process-wide singleton. A hook receives `(req, data)`, may be synchronous or return a Promise, and its return value is not automatically substituted into the request or response. Built-in hook names are `hashPassword`, `sendWelcomeEmail`, `updateInventory`, and `monthlySalesReport`; the last three are demonstration placeholders. `hashPassword` hashes `req.body.password` in place.
+
+```js
+const { router, hooks } = dabApi(config);
+
+hooks.register('auditCreate', async (req, result) => {
+  console.log('created by', req.ip, result);
+});
+hooks.registerBatch({
+  beforeSave: async (req) => { req.body.name = req.body.name.trim(); },
+  afterSave: async (req, result) => { /* notify an application service */ }
+});
+
+app.use('/api', router);
+```
+
+Use API `hooks` to name lifecycle hooks:
 
 ```json
 {
-  "success": true,
-  "data": { "result": 25.50 },
-  "timestamp": "..."
+  "hooks": { "before": "beforeSave", "after": "afterSave" }
 }
 ```
 
----
+For CRUD, before runs before the operation and after runs after success. Stored function/procedure APIs also run these hooks. Unknown hook names log a warning and return `null`. Hook errors fail the request. The router options middleware runs before validation; it is separate from named hooks.
 
-#### 5. CALL_PROCEDURE
+### JavaScript `FUNCTION` endpoint
 
-Calls a **MySQL stored procedure** (`CALL myProc(...)`) and returns its result sets.
+Use `type: "FUNCTION"` to return arbitrary application logic without CRUD handling. The handler must be registered before requests arrive.
+
+```js
+const { router, hooks } = dabApi({
+  apis: [{
+    id: 'health-summary', endpoint: '/summary', method: 'GET',
+    type: 'FUNCTION', handler: 'buildSummary'
+  }]
+});
+
+hooks.register('buildSummary', async (req) => ({
+  requestedAt: new Date().toISOString(),
+  period: req.query.period || 'today'
+}));
+app.use('/api', router);
+```
+
+## Transactions
+
+`type: "TRANSACTION"` executes steps sequentially on one DB transaction. Any thrown error rolls back the DB work. Step types are `CRUD` and `FUNCTION`. CRUD steps support `CREATE` and `UPDATE`; `customQuery` steps are also supported. `saveAs` stores a result under that key for later mappings and for function hooks. `map` copies prior step result values into the current CRUD step's input data using `$stepName.path` references.
+
+```js
+const config = {
+  database: { host: 'localhost', user: 'app', password: process.env.DB_PASSWORD, database: 'shop' },
+  apis: [{
+    id: 'create-order', endpoint: '/orders', method: 'POST', type: 'TRANSACTION',
+    steps: [
+      { type: 'CRUD', operation: 'CREATE', table: 'orders', columns: ['user_id', 'total'], saveAs: 'order' },
+      { type: 'CRUD', operation: 'CREATE', table: 'order_items', columns: ['order_id', 'product_id', 'quantity'], map: { order_id: '$order.id' } },
+      { type: 'FUNCTION', handler: 'afterOrderCreated', saveAs: 'notification' }
+    ]
+  }]
+};
+```
+
+Register a step handler as usual: `hooks.register('afterOrderCreated', async (req, results) => { ... })`. It receives the accumulated results object as its second argument. Because hooks can perform external side effects, those side effects are not rolled back if a later database step fails.
+
+CRUD step configuration fields:
+
+| Field | Meaning |
+|---|---|
+| `type` | `CRUD` or `FUNCTION`. |
+| `operation` | For CRUD: `CREATE` or `UPDATE`. |
+| `table`, `columns` | Target and allowed input columns for standard CRUD. |
+| `map` | Object mapping target field names to prior result paths, e.g. `{ "user_id": "$user.id" }`. |
+| `saveAs` | Key under which the step result is stored. |
+| `handler` | Registered hook name for a FUNCTION step. |
+| `forEach` | Request body array property. Repeats this CRUD step for each object in the array and returns an array of results. |
+| `customQuery`, `filters`, `filterConfig`, `pagination` | Custom SQL options described below. |
+
+`forEach` example: a step with `"forEach":"items"` processes `req.body.items`; each item must be an object. In this mode the current item's `id` is also copied to `req.params.id` for an UPDATE step.
+
+## Stored database functions and procedures
+
+These types call the configured database routine. `params` is an ordered array. Each definition has `name`, `source`, and (for `static`) optional `value`. Supported sources: `body`, `query`, `params`, `headers`, `static`. Missing request values are passed as `null`. Stored routine names are configuration and must be trusted.
+
+### `CALL_FUNCTION`
+
+Set `function` to the database function name. The response data is `{ "result": ... }`.
 
 ```json
 {
-  "id": "transfer-funds",
-  "name": "Transfer Funds",
-  "endpoint": "/transfer",
+  "id": "discount",
+  "endpoint": "/discount",
+  "method": "POST",
+  "type": "CALL_FUNCTION",
+  "function": "calculate_discount",
+  "params": [
+    { "name": "amount", "source": "body" },
+    { "name": "code", "source": "body" },
+    { "name": "currency", "source": "static", "value": "USD" }
+  ],
+  "validation": { "amount": "required|number", "code": "required|string" }
+}
+```
+
+### `CALL_PROCEDURE`
+
+Set `procedure` to the routine name. A single result set is returned as an array; multiple result sets remain nested.
+
+```json
+{
+  "id": "transfer",
+  "endpoint": "/transfers",
   "method": "POST",
   "type": "CALL_PROCEDURE",
   "procedure": "transfer_funds",
   "params": [
     { "name": "from_account", "source": "body" },
-    { "name": "to_account",   "source": "body" },
-    { "name": "amount",       "source": "body" },
-    { "name": "currency",     "source": "static", "value": "INR" }
+    { "name": "to_account", "source": "body" },
+    { "name": "amount", "source": "body" },
+    { "name": "currency", "source": "static", "value": "USD" }
   ],
   "validation": {
     "from_account": "required|number",
-    "to_account":   "required|number",
-    "amount":       "required|number"
+    "to_account": "required|number",
+    "amount": "required|number"
   }
 }
 ```
 
-Procedures with URL params:
+Validation for a GET route reads query parameters; on non-GET routes it reads the JSON body, regardless of parameter source. PostgreSQL routines use the PostgreSQL driver's supported function/procedure call syntax; verify routine semantics with your database/version.
+
+## Custom SQL
+
+CRUD APIs and transaction APIs/steps may set `customQuery`. It replaces generated SQL; `table`, `columns`, and `joins` are ignored for that execution. Keep SQL static and trusted. Bind client values using `?` placeholders; never concatenate request data into the SQL string. DAB converts placeholders to PostgreSQL `$1`, `$2`, etc. when using PostgreSQL.
+
+For every placeholder, provide one corresponding name in `filters`, in left-to-right order. On READ, values are looked up first in route parameters, then query parameters. On CREATE/UPDATE, values come from the request body.
 
 ```json
 {
-  "id": "user-stats",
-  "endpoint": "/users/:id/stats",
+  "id": "get-user-by-id",
+  "endpoint": "/users/:id",
   "method": "GET",
-  "type": "CALL_PROCEDURE",
-  "procedure": "get_user_stats",
-  "params": [
-    { "name": "id",     "source": "params" },
-    { "name": "period", "source": "query"  }
-  ]
+  "type": "CRUD",
+  "operation": "READ",
+  "customQuery": "SELECT id, name, email FROM users WHERE id = ?",
+  "filters": ["id"]
 }
 ```
 
-| Field | Description |
-|---|---|
-| `procedure` | Name of the MySQL stored procedure |
-| `params` | Ordered array of parameter definitions |
-
-If the procedure returns a single result set, `data` is that array directly. Multiple result sets are returned as an array of arrays.
-
----
-
-### Validation Rules
-
-The `validation` object maps field names to pipe-separated rule strings. Rules are evaluated left to right; the first failure stops evaluation for that field.
-
-```json
-"validation": {
-  "email":    "required|email",
-  "age":      "required|number|minValue:18|maxValue:120",
-  "username": "required|string|min:3|max:20",
-  "role":     "required|in:admin,user,guest",
-  "website":  "url",
-  "zip":      "pattern:^[0-9]{5}$"
-}
-```
-
-**Available rules:**
-
-| Rule | Description |
-|---|---|
-| `required` | Field must be present and non-empty |
-| `string` | Must be a string |
-| `number` | Must be numeric |
-| `boolean` | Must be `true`, `false`, or a boolean |
-| `array` | Must be an array |
-| `email` | Must match email format |
-| `url` | Must be a valid URL |
-| `min:N` | String/array length must be at least N |
-| `max:N` | String/array length must not exceed N |
-| `minValue:N` | Numeric value must be at least N |
-| `maxValue:N` | Numeric value must not exceed N |
-| `in:a,b,c` | Value must be one of the listed options |
-| `pattern:REGEX` | Value must match the regular expression |
-
-Validation errors return HTTP 400:
+Request: `GET /api/users/42`. A write example:
 
 ```json
 {
-  "success": false,
-  "error": {
-    "message": "Validation failed",
-    "code": 400,
-    "details": [
-      { "field": "email", "message": "email must be a valid email" }
-    ]
-  }
+  "id": "rename-user",
+  "endpoint": "/users/:id",
+  "method": "PATCH",
+  "type": "CRUD",
+  "operation": "UPDATE",
+  "customQuery": "UPDATE users SET name = ? WHERE id = ?",
+  "filters": ["name", "id"],
+  "validation": { "name": "required|string", "id": "required|number" }
 }
 ```
 
----
+Send both `name` and `id` in the JSON body for this write example. For a custom SELECT without placeholders, `filters` instead names result columns that DAB can filter automatically. `filterConfig` works as for normal READ; pagination wraps the custom SQL as a subquery and is intended for SELECT statements. Page defaults to 1 and limit to 10. Do not use pagination on write statements.
 
-### Hooks
+## Router middleware
 
-Hooks are named functions that run **before** or **after** the main operation. They are registered in the hooks engine and referenced by name in API config.
-
-```json
-"hooks": {
-  "before": "hashPassword",
-  "after": "sendWelcomeEmail"
-}
-```
-
-**Built-in hooks:**
-
-| Hook Name | Trigger | Behaviour |
-|---|---|---|
-| `hashPassword` | before | Hashes `req.body.password` using bcrypt (cost 10) |
-| `sendWelcomeEmail` | after | Placeholder — logs and returns `{ emailSent: true }` |
-| `updateInventory` | after / FUNCTION | Placeholder — logs order data |
-| `monthlySalesReport` | FUNCTION | Returns mock monthly sales data |
-
----
-
-### Filters & Pagination
-
-Applied to `READ` operations via `req.query`.
-
-```json
-{
-  "filters": ["email", "first_name"],
-  "filterConfig": {
-    "first_name": { "operator": "LIKE" }
-  },
-  "pagination": true
-}
-```
-
-**Filter behaviours:**
-
-| Query value | Behaviour |
-|---|---|
-| `?email=a@b.com` | `WHERE email = 'a@b.com'` |
-| `?email=a@b.com,c@d.com` | `WHERE email IN ('a@b.com', 'c@d.com')` |
-| `?first_name=John` (with `LIKE`) | `WHERE first_name LIKE '%John%'` |
-| `?_or=John` (with `orFields`) | `WHERE field1 = 'John' OR field2 = 'John'` |
-
-**Pagination query params:**
-
-| Param | Default | Description |
-|---|---|---|
-| `page` | 1 | Page number |
-| `limit` | 10 | Rows per page |
-
-```bash
-GET /api/users?page=2&limit=25&email=example.com
-```
-
----
-
-### Joins
-
-```json
-{
-  "table": "um_users",
-  "columns": ["um_users.*", "um_user_roles.role_id"],
-  "joins": [
-    {
-      "type": "INNER",
-      "table": "um_user_roles",
-      "condition": "um_users.id = um_user_roles.user_id"
-    }
-  ]
-}
-```
-
-| `type` | SQL |
-|---|---|
-| `INNER` | `INNER JOIN` |
-| `LEFT` | `LEFT JOIN` |
-| `RIGHT` | `RIGHT JOIN` |
-
----
-
-### Parameter Sources
-
-Used in `CALL_FUNCTION` and `CALL_PROCEDURE` to map incoming request data to ordered DB params.
-
-```json
-"params": [
-  { "name": "user_id",  "source": "body"    },
-  { "name": "sort",     "source": "query"   },
-  { "name": "id",       "source": "params"  },
-  { "name": "token",    "source": "headers" },
-  { "name": "currency", "source": "static",  "value": "INR" }
-]
-```
-
-| `source` | Reads from | Notes |
-|---|---|---|
-| `body` | `req.body[name]` | POST/PUT JSON body |
-| `query` | `req.query[name]` | URL query string |
-| `params` | `req.params[name]` | URL path params (`:id`) |
-| `headers` | `req.headers[name]` | HTTP headers (lowercased) |
-| `static` | `value` field | Hard-coded value, never from request |
-
-Parameters are passed to the DB **in the order they appear** in the array, matching the procedure/function signature.
-
----
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `APP_URL` | Base URL of the application |
-| `DB_HOST` | MySQL host |
-| `DB_USER` | MySQL username |
-| `DB_PASS` | MySQL password |
-| `DB_NAME` | MySQL database name |
-| `PORT` | Server port (default: `3000`) |
-
----
-
-## Advanced Usage
-
-### Custom Middleware
-
-Pass middleware to the options object to run it on every route before validation:
+Pass one Express middleware function or an array using the second argument to `dabApi`. Middleware runs before validation on every generated route.
 
 ```js
-const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization;
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  req.user = decodeToken(token);
+const requireAuth = (req, res, next) => {
+  if (!req.get('authorization')) return res.status(401).json({ error: 'Unauthorized' });
   next();
 };
 
-const { router } = dynamicApi(config, {
-  middleware: authMiddleware   // or an array of middleware functions
-});
+const { router } = dabApi(config, { middleware: [requireAuth] });
+app.use('/api', router);
 ```
 
-### Registering Custom Hooks
+Middleware should call `next()` to continue or end the response. Use standard Express error flow by calling `next(error)`.
 
-Access the `hooks` object returned by `dabApi` to register your own functions:
+## Responses and errors
+
+Successful routes normally return HTTP 200:
+
+```json
+{"success":true,"data":[],"timestamp":"2026-01-01T00:00:00.000Z"}
+```
+
+The actual `data` shape depends on the operation. Validation failures return HTTP 400. An UPDATE with no matching row returns 204 with no response body. Errors reaching DAB's router error handler use:
+
+```json
+{"success":false,"error":{"message":"...","code":500,"details":null},"timestamp":"2026-01-01T00:00:00.000Z"}
+```
+
+The module installs its error handler on the returned router. `response.errorHandler()` is also exported for advanced use, but do not register it twice for the same DAB route.
+
+## Advanced query builder
+
+The returned `queryBuilder` singleton exposes raw database access and query-building methods. It is initialized from the root configuration when a database is provided. Raw execution accepts SQL placeholders and an ordered values array:
 
 ```js
-const { router, hooks } = dynamicApi(config);
-
-// Register a single hook
-hooks.register('sendOrderEmail', async (req, data) => {
-  await mailer.send({ to: req.body.email, subject: 'Order confirmed', data });
-  return { sent: true };
-});
-
-// Register multiple hooks at once
-hooks.registerBatch({
-  logRequest:    async (req) => { console.log(req.method, req.path); },
-  validatePromo: async (req) => { /* promo check logic */ }
-});
+const { queryBuilder } = dabApi(config);
+const rows = await queryBuilder.execute('SELECT id, email FROM users WHERE id = ?', [42]);
 ```
 
-Then reference the hook name in your API config:
+The builder also exposes `select`, `insert`, `update`, `delete`, `where`, `whereIn`, `whereOr`, `paginate`, `orderBy`, `join`, `leftJoin`, `rightJoin`, `groupBy`, `build`, `callFunction`, `callProcedure`, `beginTransaction`, `commit`, `rollback`, and `close`. These are lower-level APIs; see `src/db/queryBuilder.js` for their exact signatures. Use `close()` during application shutdown to drain pools.
 
-```json
-"hooks": {
-  "after": "sendOrderEmail"
-}
-```
+The main function returns `{ router, validator, executor, queryBuilder, hooks, response }`. The package also exports `DabRouter`, `DabValidator`, `DabExecutor`, `DabQueryBuilder`, `DabHooks`, and `DabResponse` as named CommonJS properties.
 
----
+## Configuration checklist
 
-## API Response Format
-
-All responses follow a consistent envelope:
-
-**Success:**
-
-```json
-{
-  "success": true,
-  "data": { ... },
-  "timestamp": "2026-06-04T08:00:00.000Z"
-}
-```
-
-**Validation error (400):**
-
-```json
-{
-  "success": false,
-  "error": {
-    "message": "Validation failed",
-    "code": 400,
-    "details": [
-      { "field": "email", "message": "email must be a valid email" }
-    ]
-  },
-  "timestamp": "2026-06-04T08:00:00.000Z"
-}
-```
-
----
-
-## Health Check
-
-```bash
-GET /health
-```
-
-```json
-{
-  "status": "ok",
-  "message": "dynamic-api-js is running"
-}
-```
-
----
-
-## Complete api.json Example
-
-The following covers all five API types in one file:
-
-```json
-{
-  "version": "1.0",
-  "basePath": "/api",
-  "apis": [
-
-    // ── CRUD: CREATE ─────────────────────────────────────────────────────────
-    {
-      "id": "create-user",
-      "name": "Create User",
-      "endpoint": "/users",
-      "method": "POST",
-      "type": "CRUD",
-      "operation": "CREATE",
-      "table": "users",
-      "columns": ["name", "email", "password"],
-      "validation": {
-        "name": "required|string|min:3",
-        "email": "required|email",
-        "password": "required|string|min:8"
-      },
-      "hooks": {
-        "before": "hashPassword",
-        "after": "sendWelcomeEmail"
-      }
-    },
-
-    // ── CRUD: READ with filters, joins, pagination ────────────────────────────
-    {
-      "id": "get-users-with-roles",
-      "endpoint": "/users-with-roles",
-      "method": "GET",
-      "type": "CRUD",
-      "operation": "READ",
-      "table": "um_users",
-      "columns": ["um_users.*", "um_user_roles.role_id"],
-      "joins": [
-        {
-          "type": "INNER",
-          "table": "um_user_roles",
-          "condition": "um_users.id = um_user_roles.user_id"
-        }
-      ],
-      "filters": ["email", "first_name"],
-      "filterConfig": {
-        "first_name": { "operator": "LIKE" }
-      },
-      "pagination": true
-    },
-
-    // ── CRUD: DELETE ──────────────────────────────────────────────────────────
-    {
-      "id": "delete-user",
-      "name": "Delete User",
-      "endpoint": "/user/delete/:id",
-      "method": "DELETE",
-      "type": "CRUD",
-      "operation": "DELETE",
-      "table": "um_users"
-    },
-
-    // ── TRANSACTION ───────────────────────────────────────────────────────────
-    {
-      "id": "create-order",
-      "name": "Create Order",
-      "endpoint": "/orders",
-      "method": "POST",
-      "type": "TRANSACTION",
-      "steps": [
-        {
-          "type": "CRUD",
-          "operation": "CREATE",
-          "table": "orders",
-          "columns": ["user_id", "total"],
-          "saveAs": "order"
-        },
-        {
-          "type": "CRUD",
-          "operation": "CREATE",
-          "table": "order_items",
-          "columns": ["order_id", "product_id", "qty"],
-          "map": { "order_id": "$order.id" }
-        },
-        {
-          "type": "FUNCTION",
-          "handler": "updateInventory"
-        }
-      ]
-    },
-
-    // ── FUNCTION ──────────────────────────────────────────────────────────────
-    {
-      "id": "monthly-report",
-      "name": "Monthly Sales Report",
-      "endpoint": "/reports/monthly",
-      "method": "GET",
-      "type": "FUNCTION",
-      "handler": "monthlySalesReport"
-    },
-
-    // ── CALL_FUNCTION (MySQL stored function) ─────────────────────────────────
-    {
-      "id": "get-discount",
-      "name": "Get Discount",
-      "endpoint": "/discount",
-      "method": "POST",
-      "type": "CALL_FUNCTION",
-      "function": "get_discount",
-      "params": [
-        { "name": "user_id", "source": "body" },
-        { "name": "amount",  "source": "body" },
-        { "name": "promo",   "source": "body" }
-      ],
-      "validation": {
-        "user_id": "required|number",
-        "amount":  "required|number"
-      }
-    },
-
-    // ── CALL_PROCEDURE (MySQL stored procedure, static param) ─────────────────
-    {
-      "id": "transfer-funds",
-      "name": "Transfer Funds",
-      "endpoint": "/transfer",
-      "method": "POST",
-      "type": "CALL_PROCEDURE",
-      "procedure": "transfer_funds",
-      "params": [
-        { "name": "from_account", "source": "body" },
-        { "name": "to_account",   "source": "body" },
-        { "name": "amount",       "source": "body" },
-        { "name": "currency",     "source": "static", "value": "INR" }
-      ],
-      "validation": {
-        "from_account": "required|number",
-        "to_account":   "required|number",
-        "amount":       "required|number"
-      }
-    },
-
-    // ── CALL_PROCEDURE (URL param + query param) ──────────────────────────────
-    {
-      "id": "user-stats",
-      "name": "User Statistics",
-      "endpoint": "/users/:id/stats",
-      "method": "GET",
-      "type": "CALL_PROCEDURE",
-      "procedure": "get_user_stats",
-      "params": [
-        { "name": "id",     "source": "params" },
-        { "name": "period", "source": "query"  }
-      ]
-    }
-
-  ]
-}
-```
+- Mount JSON parsing before the router (`express.json()`).
+- Match each API's `type` and required fields (`operation`, `table`, `columns`, `handler`, `function`, or `procedure`).
+- Use `:id` for standard UPDATE/DELETE; standard READ does not infer route-param filters.
+- List only writable columns in `columns`; request fields outside the list are ignored.
+- Add `required` validation where values must be supplied.
+- Keep SQL, table names, column names, join conditions, routine names, and hook names in trusted configuration.
+- Use `?` bindings for client-supplied custom SQL values.
+- Verify database routine syntax and schema against your selected MySQL/PostgreSQL version.
